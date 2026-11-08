@@ -61,7 +61,8 @@ because the run survived it.
 
 28/28 was passing when real bugs were found in the field. Worth writing down,
 because this is the clearest available statement of what the number is worth.
-Three different unreachable paths, all found outside the corpus.
+Four different unreachable paths, all found outside the corpus. The
+fourth is the worst of the four and is at the end of this section.
 
 ### 1. The cross-domain policy
 
@@ -174,6 +175,70 @@ host's own metadata service. The transport may take a permit list (the tests
 use one) and the pipeline must not forward it. The fix was reverted and the
 test injects the allowance at the transport instead, where it already lives.
 A guard that only ever passes is decoration; this one failed on its author.
+
+### 4. The rows were counted before they were delivered
+
+The worst one, and the only one a user found. A run against a live site
+reported **"Succeeded 200 URLs from 24/24 sitemaps"** and the Output tab was
+empty. Not nearly empty — `itemCount: 0`. Checked afterwards, **all three
+platform runs**, builds 1.0.2, 1.0.3 and 1.0.5, had delivered nothing, and
+each had exited 0.
+
+Three failures stacked. Any one of them alone would have been survivable.
+
+**The serialization.** `UrlRecord.to_dict` returned `asdict(self)`, which
+keeps every field, `None` ones included, so each row carried nine nulls:
+`"statusCode": null`, `"errorType": null`, `"contentType": null` and the
+rest. `dataset_schema.json` declares `statusCode` as `integer` and
+`errorType` as a 26-value enum, and a JSON Schema `type` does not admit
+`null`. The platform validates on push — which is the only reason this was
+loud at all — and answered `Schema validation failed` for every batch.
+
+**The swallowed exception.** `_drain` caught that, logged it, and carried
+on. The log held `pushing a batch to the dataset failed` and a traceback;
+the run ended `Exiting Actor ({"exit_code": 0})`. A failure that is logged
+and then discarded is a failure that is not a failure.
+
+**The status message.** It was built from `summary.urlsEmitted`, which
+counts what the parser produced. The count of what the dataset accepted was
+in the same summary — `rowsPushed: 0` — and nothing read it. The run told
+the user 200; the truth was 0; both numbers were in the record and only the
+wrong one was displayed.
+
+That third one is the general lesson and it is worth more than the fix. A
+field that reports the truth changes nothing unless something acts on it.
+The counter that would have caught this had been written, was correct, and
+was ignored.
+
+Why the corpus missed it: the fixtures are checked as Python objects. They
+never become JSON, and they never cross the platform boundary. The corpus
+tests the parser. This defect was in the last mile, and the last mile had
+no tests at all.
+
+And the schema's own descriptions said *"Null when the URL was not checked"*
+over a field declared `"type": "integer"`. Third defect in this project of
+exactly that shape — the documentation asserting something the validator
+refuses. The first two cost a build and a publishing gate. This one cost
+three runs' worth of data.
+
+Writing the fix produced the next bug, which is why this entry has two
+guards rather than one. A run cut at `maxTotalChargeUsd` **also** ends
+with an empty dataset and a summary full of counted URLs. It is the same
+observable state as the failure, and the first draft of the delivery
+check judged it a failure too. Reporting correct behaviour as a crash is
+not a smaller error than the reverse, so the verdict became a function
+that keeps the pair apart, and the second case pins that pair from both
+sides. It was verified to fail on three mutations, the first of them
+precisely this confusion — caught here rather than in a user's run.
+
+| | |
+| --- | --- |
+| Found by | the user, reading a live run's Output tab |
+| Fixed in | `models.py` (`to_dict` omits `None`, both record types), `src/main.py` (delivery check, honest status message, push counters), `dataset_schema.json` ("Absent when…" where the type cannot admit null), `README.md` (the worked example showed nulls too) |
+| Rule now | a row omits a field that does not apply, never sends null; a run that produced rows and delivered none exits non-zero; the status message reports what was delivered, and shows both numbers when they differ |
+| Test added | `tests/test_actor_contract.py` — two cases. `test_every_emitted_row_is_a_row_the_platform_will_store` validates emitted rows **and the README's own worked example** against the declared types and enums. `test_a_run_that_delivered_nothing_does_not_report_success` pins the verdict on what the dataset accepted |
+| Verified | the first guard fails on five independent mutations — nulls from `to_dict`, nulls in the README example, `statusCode` declared `string`, `redirect_loop` dropped from the enum, an undeclared field in the README. The second fails on three: a charge-limit cut misread as a failure, refused batches treated as fine, and a total loss no longer called fatal. Each passes once reverted |
+| Result | **12 / 12**, and the full suite on both line-ending forms: 5/5 + 9/9 + 18/18 + 12/12 + 28/28, `runs killed: none` |
 
 ## The run Apify re-tests every day
 
@@ -314,7 +379,7 @@ that can go stale on its own. Three did, and all three were found by hand.
 | `actor.json` `description` was 302 characters | Apify's limit is 300. Refused the same way, one round trip later |
 
 So the default is now one constant, `DEFAULT_MAX_URLS`, and the copies that
-cannot use it are pinned by `tests/test_actor_contract.py` (9 cases) — which
+cannot use it are pinned by `tests/test_actor_contract.py` (12 cases) — which
 also asserts the published `errorType` enum equals the code's enum **in both
 directions**, because an omitted value is silently un-filterable in the
 Console's Problems view and a listed value nobody emits is a promise nobody
@@ -367,7 +432,9 @@ not what it prints when the code is right.
 | --- | --- |
 | Fixed in | `models.py` (`DEFAULT_MAX_URLS`), `parse.py`, `pipeline.py`, `src/main.py`, `actor.json` |
 | Rule now | one constant for the shipped default; the schema copy, the platform field limits and the published error enum are asserted against the code, not trusted |
-| Test added | `tests/test_actor_contract.py` — 8 cases at the time; 9 today, the ninth being the output-schema case described above |
+| Test added | `tests/test_actor_contract.py` — 8 cases at the time; 12 today — the ninth being the output-schema case
+described above, the tenth the countable cross-entry link, and the
+eleventh and twelfth the dataset-row and delivery cases in section 4 |
 | Result | **8 / 8**, and the full suite re-run afterwards: 5/5 + 9/9 + 18/18 + 28/28, `runs killed: none` |
 
 ## Reproducing
@@ -397,8 +464,8 @@ CRLF; commits normalise to LF. Both forms were run in full, on the same code:
 
 | tree | result |
 | --- | --- |
-| CRLF working copies | 28/28 (100.0%), runs killed: none, plus 5/5 + 9/9 + 18/18 + 9/9 |
-| LF form of the same code, read from the index blobs | 28/28 (100.0%), runs killed: none, plus 5/5 + 9/9 + 18/18 + 9/9 |
+| CRLF working copies | 28/28 (100.0%), runs killed: none, plus 5/5 + 9/9 + 18/18 + 12/12 |
+| LF form of the same code, read from the index blobs | 28/28 (100.0%), runs killed: none, plus 5/5 + 9/9 + 18/18 + 12/12 |
 
 The LF row is worded that way because an *LF checkout* is not something this
 repository can produce. `git checkout-index` under the checked-in

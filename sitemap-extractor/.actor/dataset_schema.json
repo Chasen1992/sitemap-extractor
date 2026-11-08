@@ -13,7 +13,7 @@
       },
       "sourceSitemap": {
         "type": "string",
-        "description": "Which sitemap file this URL was found in."
+        "description": "Which sitemap file this URL was found in. Absent when it is not known."
       },
       "depth": {
         "type": "integer",
@@ -25,27 +25,27 @@
       },
       "statusCode": {
         "type": "integer",
-        "description": "The HTTP status code from the probe. Null when the URL was not checked or the probe failed before a status arrived."
+        "description": "The HTTP status code from the probe. Absent when the URL was not checked, or when the probe failed before a status arrived — a missing key means unknown, not zero. Fields that are unknown are omitted rather than sent as null; this schema's types do not admit null."
       },
       "contentType": {
         "type": "string",
-        "description": "The response Content-Type from the probe, if any."
+        "description": "The response Content-Type from the probe. Absent when there was none, or when the URL was not probed."
       },
       "lastmodRaw": {
         "type": "string",
-        "description": "The <lastmod> value verbatim, whatever shape it had (YYYY, YYYY-MM, RFC822, +0800 without a colon, impossible dates). Kept because a parseable rewrite loses information."
+        "description": "The <lastmod> value verbatim, whatever shape it had (YYYY, YYYY-MM, RFC822, +0800 without a colon, impossible dates). Kept because a parseable rewrite loses information. Absent when the entry carried no <lastmod>."
       },
       "lastmodIso": {
         "type": "string",
-        "description": "The same value best-effort-parsed to ISO-8601. Null when it could not be parsed — the row is never dropped for a bad date."
+        "description": "The same value best-effort-parsed to ISO-8601. Absent when there was no <lastmod>, or when it could not be parsed — the row is never dropped for a bad date."
       },
       "priority": {
         "type": "number",
-        "description": "The sitemap <priority>, if present."
+        "description": "The sitemap <priority>. Absent when the entry carried none."
       },
       "changeFrequency": {
         "type": "string",
-        "description": "The sitemap <changefreq>, if present. Reported, not obeyed."
+        "description": "The sitemap <changefreq>. Reported, not obeyed. Absent when the entry carried none."
       },
       "hasImages": {
         "type": "boolean",
@@ -65,7 +65,7 @@
       },
       "errorType": {
         "type": "string",
-        "description": "Why this row is not a plain success. One of a fixed enum so failures can be filtered and counted — free-text errors cannot.",
+        "description": "Why this row is not a plain success. One of a fixed enum so failures can be filtered and counted — free-text errors cannot. Absent on a plain success.",
         "enum": [
           "http_error",
           "timeout",
@@ -97,7 +97,7 @@
       },
       "errorMessage": {
         "type": "string",
-        "description": "Human-readable detail for errorType. Filter on errorType; read errorMessage."
+        "description": "Human-readable detail for errorType. Filter on errorType; read errorMessage. Absent when there is nothing to add beyond the errorType."
       }
     },
     "required": ["url", "normalizedUrl"]

@@ -145,10 +145,30 @@ class UrlRecord:
     errorMessage: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
+        """The row exactly as the dataset receives it.
+
+        Fields that are ``None`` are **omitted**, not sent as ``null``. This is
+        not tidiness — it is the fix for the worst defect this project has had.
+        The dataset schema declares ``statusCode`` as ``integer``, ``contentType``
+        as ``string`` and ``errorType`` as a 26-value enum, and a JSON Schema
+        ``type`` does not admit ``null``. ``asdict`` kept every ``None``, so the
+        platform answered ``Schema validation failed`` for **every** batch, and
+        all three live runs reported 200 URLs behind an empty dataset. The
+        summary counted what the parser produced; nobody counted what the
+        dataset accepted.
+
+        Dropping rather than declaring ``["integer", "null"]`` is deliberate.
+        The schema's ``required`` is only ``["url", "normalizedUrl"]``, so an
+        absent key is always legal; whether *this* validator accepts a nullable
+        type is untested, and it has already refused things its own docs said
+        were fine. Absent and null read the same in a table, and ``checked``
+        already separates "not probed" from "probed and failed", so nothing is
+        lost by omitting.
+        """
         d = asdict(self)
         if self.errorType is not None:
             d["errorType"] = self.errorType.value
-        return d
+        return {key: value for key, value in d.items() if value is not None}
 
 
 @dataclass(slots=True)
@@ -175,10 +195,18 @@ class SitemapRecord:
     errorMessage: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
+        """Same rule as ``UrlRecord.to_dict``: omit ``None``, never send null.
+
+        This one lands in the key-value store, which is not schema-validated
+        today, so the defect here has not cost anything yet. It is the same
+        shape as the one that emptied the dataset on every live run, and a
+        record type that serialises differently from its sibling is how that
+        shape comes back.
+        """
         d = asdict(self)
         if self.errorType is not None:
             d["errorType"] = self.errorType.value
-        return d
+        return {key: value for key, value in d.items() if value is not None}
 
 
 @dataclass(slots=True)

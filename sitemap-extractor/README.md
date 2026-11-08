@@ -72,11 +72,15 @@ Each row in the dataset is one URL:
   "statusCode": 200,
   "contentType": "text/html",
   "lastmodRaw": "2024-11-02T08:00:00+0000",
-  "lastmodIso": "2024-11-02T08:00:00+00:00",
-  "errorType": null,
-  "errorMessage": null
+  "lastmodIso": "2024-11-02T08:00:00+00:00"
 }
 ```
+
+A field that does not apply is **absent**, not `null`. There is no
+`errorType` above because that URL came back clean; a row that was never
+probed carries no `statusCode` at all. Telling "no problem" apart from
+"unknown" is the job of `checked` and `errorType`, so a missing key never
+has to mean two things at once.
 
 **Some rows are listed but never checked.** A sitemap often publishes URLs on a CDN or a partner host. Those are returned with `crossDomain: true` and `errorType: "cross_domain"`, and are never requested. Fetching a third party the site merely referenced is not what you asked for. `www.example.com` and `example.com` count as one site and are never marked this way; real subdomains are governed by **Include subdomains**.
 
@@ -143,7 +147,7 @@ Turning **Check status codes** off is the single biggest cost lever, because sta
 
 **Open an issue** at [github.com/Chasen1992/sitemap-extractor/issues](https://github.com/Chasen1992/sitemap-extractor/issues) — include the run URL and the `SUMMARY` record if you have one. That record is designed to make bug reports self-diagnosing.
 
-**Want these URLs watched for changes?** The thing people most often want next is not another extraction but a *monitor*: run this same sitemap parser on a schedule and tell them what appeared, disappeared, or changed status. That is being built. If it is something you would use, [say so](https://github.com/Chasen1992/sitemap-extractor/issues/new) — the requests decide what gets built first. Every run writes an offer for this to the `NEXT_STEP` key-value record, which is how that decision gets made on evidence rather than guesswork.
+**Want these URLs watched for changes?** The thing people most often want next is not another extraction but a *monitor*: run this same sitemap parser on a schedule and tell them what appeared, disappeared, or changed status. That is being built. If it is something you would use, [say so](https://github.com/Chasen1992/sitemap-extractor/issues/new?title=Monitor+request&labels=monitor-request&body=What+would+you+want+the+monitor+to+tell+you%2C+and+how+often%3F) — the requests decide what gets built first. Every run writes an offer for this to the `NEXT_STEP` key-value record, which is how that decision gets made on evidence rather than guesswork.
 
 ### Known limits, stated rather than hidden
 

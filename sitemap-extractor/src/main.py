@@ -20,7 +20,7 @@ import asyncio
 import logging
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
-from typing import Any
+from typing import Any, NamedTuple
 
 from apify import Actor
 
@@ -44,11 +44,41 @@ log = logging.getLogger(__name__)
 CHARGE_EVENT = "apify-default-dataset-item"
 
 # Where "want to monitor these URLs?" points. The monitoring product does not
-# exist yet (it is a day-14 deliverable), so this is the countable signal the
-# plan asks for: every click becomes an issue, and issues can be counted. When
-# the monitor has a real listing, change this one string and the offer in
-# README.md follows it.
-SUPPORT_URL = "https://github.com/Chasen1992/sitemap-extractor/issues/new"
+# exist yet (it is a day-14 deliverable), so this has to be countable rather
+# than merely clickable — the plan asks for a cross-entry *with instrumentation*
+# and a conversion figure from day one, and a bare /issues/new link provides
+# neither. A monitor request is indistinguishable from a bug report, and there
+# is no denominator to divide by.
+#
+# Counting recipe, so day 14 arrives with numbers instead of impressions:
+#
+#   numerator    issues in Chasen1992/sitemap-extractor whose title is
+#                "Monitor request", or which carry the monitor-request label
+#   denominator  Apify API -> GET /v2/acts/<id> -> stats.totalUsers30Days
+#                (and stats.totalRuns for a looser version)
+#   target       >= 10% of artifact users start a monitor within 30 days
+#
+# The marker is in the TITLE and the label is a second chance. GitHub applies
+# `title` no matter who opens the issue; `labels` is silently dropped for
+# openers without push access. Counting either catches the request, so losing
+# one still leaves the other. The label exists on the repository for this.
+#
+# The body is a QUESTION, deliberately not an answer. A pre-filled sentence
+# would inflate the count with clicks and hand back my wording rather than the
+# user's, and the monitoring product's listing is supposed to be written in real
+# users' own words. Friction here is the filter.
+#
+# README.md carries a second copy of this link and drifts from it on its own —
+# the same defect class as `maxUrls`, which shipped with three values in three
+# files. Both are compared by tests/test_actor_contract.py.
+MONITOR_REQUEST_TITLE = "Monitor request"
+MONITOR_REQUEST_LABEL = "monitor-request"
+SUPPORT_URL = (
+    "https://github.com/Chasen1992/sitemap-extractor/issues/new"
+    "?title=Monitor+request"
+    "&labels=monitor-request"
+    "&body=What+would+you+want+the+monitor+to+tell+you%2C+and+how+often%3F"
+)
 
 # Key-value store records written alongside the dataset.
 SUMMARY_KEY = "SUMMARY"
@@ -74,6 +104,13 @@ class _DatasetSink:
         self.pushed = 0
         self.dropped_for_charge_limit = 0
         self.charge_limit_reached = False
+        # Batches the platform refused. Counted because the exception that
+        # reports them is logged and swallowed — without a counter, a run that
+        # lost every batch is indistinguishable in the summary from one that
+        # produced none, which is how the data-loss defect stayed invisible for
+        # three live runs.
+        self.push_failures = 0
+        self.rows_push_failed = 0
 
     def start(self) -> None:
         self._drainer = asyncio.get_event_loop().create_task(self._drain())
@@ -99,7 +136,13 @@ class _DatasetSink:
                 await self._push(batch)
             except Exception:
                 # A failed dataset write must not take the run down and must
-                # not silently lose the rest of the batches behind it.
+                # not silently lose the rest of the batches behind it. But it
+                # must not vanish either: the rows in this batch are gone, and
+                # counting them is what turns an unreadable run into a
+                # diagnosable one.
+                self.push_failures += 1
+                if batch:
+                    self.rows_push_failed += len(batch)
                 log.exception("pushing a batch to the dataset failed")
             finally:
                 self._queue.task_done()
@@ -261,6 +304,83 @@ def _utc_now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+class DeliveryVerdict(NamedTuple):
+    """What the dataset accepting some, all or none of the rows means."""
+
+    failed: bool
+    fatal: bool
+    reason: str | None
+    truncate_reason: str | None
+
+
+def _delivery_verdict(
+    *,
+    produced: int,
+    delivered: int,
+    lost: int,
+    lost_batches: int,
+    cut_on_purpose: bool,
+) -> DeliveryVerdict:
+    """Decide what the run owes the user for what the dataset accepted.
+
+    Split out of ``main`` because the distinction it encodes is the one that
+    was wrong for three live runs, and it is easy to be wrong again: a run cut
+    at ``maxTotalChargeUsd`` delivered nothing **on purpose** and must stay
+    exit 0, while a run whose batches the platform refused delivered nothing
+    **by accident** and must not. The observed state is identical — zero rows
+    in the dataset, rows counted in the summary — and the verdicts are
+    opposite. That symmetry is why this is a function and not a condition.
+
+    ``cut_on_purpose`` covers the charge limit only. The request and byte
+    budgets never cause this shape: they stop the pipeline before it emits the
+    rows, so ``produced`` is already the smaller number.
+    """
+    if lost_batches > 0:
+        # Rows the platform refused are lost whatever else happened, so this
+        # comes first: a run that was also cut at the charge limit still lost
+        # these, and "we stopped on purpose" is not an account of them.
+        if delivered == 0 and not cut_on_purpose:
+            return DeliveryVerdict(
+                failed=True,
+                fatal=True,
+                reason=(
+                    f"{produced} URLs were found and not one reached the "
+                    "dataset: every batch was refused by the platform. "
+                    "Nothing was delivered. This is a failure, not a "
+                    "truncation. The log above holds the rejection."
+                ),
+                truncate_reason=None,
+            )
+        return DeliveryVerdict(
+            failed=True,
+            fatal=False,
+            reason=(
+                f"{lost} rows were refused by the dataset and are gone "
+                f"({lost_batches} batch(es) failed to write); {delivered} were "
+                "delivered. Those rows were lost, not cut — nothing chose to "
+                "stop there. See the log for the rejection."
+            ),
+            truncate_reason="push_failed",
+        )
+
+    if produced > 0 and delivered == 0 and not cut_on_purpose:
+        # Nothing was refused and nothing arrived. Unexplained, and still a
+        # run that promised rows and delivered none.
+        return DeliveryVerdict(
+            failed=True,
+            fatal=True,
+            reason=(
+                f"{produced} URLs were found and the dataset has none of "
+                "them. Nothing reported a refusal, so the cause is not known "
+                "— but a run that promised rows and delivered none has not "
+                "succeeded. The log above is where to look."
+            ),
+            truncate_reason=None,
+        )
+
+    return DeliveryVerdict(False, False, None, None)
+
+
 def _failed_result(reason: str, exit_code: int) -> ExtractionResult:
     """A result carrying only a failure, for the paths that never reach `run`.
 
@@ -283,6 +403,8 @@ async def _write_records(result: ExtractionResult, sink: _DatasetSink) -> None:
     summary = result.summary.to_dict()
     summary["rowsPushed"] = sink.pushed
     summary["rowsDroppedForChargeLimit"] = sink.dropped_for_charge_limit
+    summary["rowsPushFailed"] = sink.rows_push_failed
+    summary["pushFailures"] = sink.push_failures
     await Actor.set_value(SUMMARY_KEY, summary)
     await Actor.set_value(SITEMAPS_KEY, result.sitemaps)
     await Actor.set_value(
@@ -291,8 +413,9 @@ async def _write_records(result: ExtractionResult, sink: _DatasetSink) -> None:
             "title": "Want these URLs watched for changes?",
             "body": (
                 "A monitor that re-checks this URL list and reports what moved "
-                "is being built. If that is something you would use, say so at "
-                f"{SUPPORT_URL} — it decides what gets built first."
+                "is being built. If that is something you would use, open the "
+                "link in this record and say so — the requests decide what gets "
+                "built first."
             ),
             "url": SUPPORT_URL,
             "urlsOffered": summary.get("urlsEmitted", 0),
@@ -356,6 +479,26 @@ async def main() -> None:
                 "incomplete by design — it was cut, not lost."
             )
 
+        # --- delivery accounting ------------------------------------------
+        # What the dataset accepted, judged against what the run produced.
+        # See `_delivery_verdict` for why this cannot be one condition.
+        verdict = _delivery_verdict(
+            produced=result.summary.urlsEmitted,
+            delivered=sink.pushed,
+            lost=sink.rows_push_failed,
+            lost_batches=sink.push_failures,
+            cut_on_purpose=sink.charge_limit_reached,
+        )
+        if verdict.failed:
+            result.summary.ok = False
+            result.summary.fatal = verdict.fatal
+            result.summary.fatalReason = verdict.reason
+            result.exit_code = EXIT_FATAL
+            if verdict.truncate_reason:
+                result.summary.truncated = True
+                if not result.summary.truncateReason:
+                    result.summary.truncateReason = verdict.truncate_reason
+
         try:
             await _write_records(result, sink)
         except Exception:
@@ -374,10 +517,21 @@ async def main() -> None:
             # all, and the answer is one sentence.
             Actor.status_message = "no sitemap found at this site"
         else:
-            status = (
-                f"{summary.urlsEmitted} URLs from "
-                f"{summary.sitemapsSucceeded}/{summary.sitemapsAttempted} sitemaps"
+            # The number a user reads here is the number of rows they will find
+            # in the dataset — what was delivered, not what the parser produced.
+            # Those agree on a healthy run and were wildly different on every
+            # live run so far (200 claimed, 0 delivered) because nothing
+            # checked that the writes had landed. When they disagree, show both:
+            # one number alone would hide the gap that matters.
+            delivered = sink.pushed
+            where = (
+                f"from {summary.sitemapsSucceeded}/{summary.sitemapsAttempted} "
+                "sitemaps"
             )
+            if delivered == summary.urlsEmitted:
+                status = f"{delivered} URLs {where}"
+            else:
+                status = f"{delivered} of {summary.urlsEmitted} URLs delivered {where}"
             if summary.truncated:
                 status += " (truncated)"
             if summary.errorBreakdown:

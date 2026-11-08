@@ -27,6 +27,7 @@ or under pytest.
 
 from __future__ import annotations
 
+import ast
 import json
 import pathlib
 import re
@@ -46,6 +47,12 @@ _ACTOR_JSON = _ACTOR_DIR / ".actor" / "actor.json"
 _INPUT_SCHEMA = _ACTOR_DIR / ".actor" / "INPUT_SCHEMA.json"
 _DATASET_SCHEMA = _ACTOR_DIR / ".actor" / "dataset_schema.json"
 _MAIN_PY = _ACTOR_DIR / "src" / "main.py"
+
+# The Actor's boundary layer, so its pure helpers can be tested here.
+# Appended rather than inserted: `sitemap_core` must keep resolving to
+# sitemap-core/, the code under test, and not to the vendored copy that
+# ships inside the Actor's build context.
+sys.path.append(str(_ACTOR_DIR / "src"))
 
 # Apify's own limits on an Actor's name/title and description. Over them the
 # push is refused outright — measured, not remembered: a 65-character title was
@@ -348,7 +355,330 @@ def test_the_output_schema_points_at_records_the_code_actually_writes() -> None:
     )
 
 
+def test_the_cross_entry_is_countable_rather_than_merely_clickable() -> None:
+    """A bare "open an issue" link cannot be counted.
+
+    The plan asks two things of this artifact: a cross-entry that carries
+    instrumentation, and a conversion figure from day one. A plain
+    ``/issues/new`` link provides neither — a monitor request is
+    indistinguishable from a bug report, and there is no denominator to divide
+    by. That is the difference between "we linked to the next product" and "we
+    can measure whether anyone followed".
+
+    The marker goes in the **title**, because GitHub applies ``title`` whoever
+    opens the issue, while ``labels`` is silently dropped for openers without
+    push access. Both are asked for, so that one surviving is enough. The body
+    is a question rather than an answer: a pre-filled sentence would inflate
+    the count with clicks and hand back our wording instead of the user's, and
+    the monitoring product's listing is supposed to be written in real users'
+    own words.
+
+    The store README carries a second copy of this link and drifts away from it
+    on its own — the same defect class as ``maxUrls``, which shipped with three
+    values in three files. Both copies are read and compared.
+
+    The constants are pulled out of ``src/main.py`` with ``ast`` rather than
+    restated here: a test that repeats the marker is a third copy, and this file
+    already reads source it cannot import.
+    """
+    tree = ast.parse(_MAIN_PY.read_text(encoding="utf-8"))
+    wanted = {"SUPPORT_URL", "MONITOR_REQUEST_TITLE", "MONITOR_REQUEST_LABEL"}
+    values: dict[str, str] = {}
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id in wanted:
+                    values[target.id] = ast.literal_eval(node.value)
+
+    url = values.get("SUPPORT_URL", "")
+    title = values.get("MONITOR_REQUEST_TITLE", "")
+    label = values.get("MONITOR_REQUEST_LABEL", "")
+    assert url and title and label, (
+        f"src/main.py does not define the cross-entry constants; found {sorted(values)}"
+    )
+
+    assert url.startswith("https://github.com/Chasen1992/sitemap-extractor/issues/new"), (
+        f"the cross-entry points somewhere other than the repository's new-issue "
+        f"page: {url}"
+    )
+    assert f"title={title.replace(' ', '+')}" in url, (
+        f"the cross-entry does not carry the countable title marker "
+        f"{title!r}: {url}. Without it a monitor request cannot be told from a "
+        "bug report, and the conversion figure the plan asks for cannot exist."
+    )
+    assert f"labels={label}" in url, (
+        f"the cross-entry does not ask for the {label!r} label: {url}"
+    )
+    assert "body=" in url, f"the cross-entry has no prompt body: {url}"
+
+    readme = (_ACTOR_DIR / "README.md").read_text(encoding="utf-8")
+    links = re.findall(r"\((https://github\.com/[^()\s]*issues/new[^()\s]*)\)", readme)
+    assert links, "the store README has no cross-entry link at all"
+    uncountable = [link for link in links if link != url]
+    assert not uncountable, (
+        f"the store README points at the bare new-issue page where the countable "
+        f"URL belongs: {uncountable}. Expected exactly {url!r}. A link nobody "
+        "counts is a signal nobody has, which is how the monitor ends up being "
+        "built on guesses."
+    )
+
+
 # --------------------------------------------------------------------------
+
+
+def test_every_emitted_row_is_a_row_the_platform_will_store() -> None:
+    """What the code emits has to be what the platform agrees to store.
+
+    ``UrlRecord.to_dict`` used ``asdict``, which keeps every ``None``, so each
+    row carried ``"statusCode": null`` and ``"errorType": null``. The dataset
+    schema declares ``statusCode`` as ``integer`` and ``errorType`` as a
+    26-value enum, and a JSON Schema ``type`` does not admit ``null`` — so
+    ``Actor.push_data`` answered ``Schema validation failed`` for **every**
+    batch. All three live runs reported 200 URLs behind an empty dataset, and
+    each exited 0. The summary counted what the parser produced; nothing
+    counted what the dataset accepted.
+
+    The schema is validated server-side on push, which is the only reason this
+    was loud at all. Had it not been, the columns would simply have been
+    missing and the loss would still be silent. So the check is here as well as
+    there: the boundary this file covers is "a row the code produces is a row
+    the schema accepts", and it is checked before anything is shipped.
+
+    The rows below are built from ``UrlRecord``'s own defaults rather than from
+    the parser, because the defect was in the serialization and not in the
+    parsing — an untouched ``UrlRecord`` already carried nine nulls. This
+    exercises no network and does not claim to.
+
+    The README's worked example is put through the same checker. That is the
+    third defect of this shape in this project: the documentation asserting
+    something the validator refuses. It is also the version users meet first —
+    a documented row the platform would reject teaches the wrong shape to
+    everyone who copies it.
+
+    No ``jsonschema`` dependency. The subset of JSON Schema this file uses is
+    ``type``, ``enum``, ``required`` and ``properties``, and a package is not
+    worth four keywords; what matters is that every value a row carries is
+    checked against the type and the enum declared for that key.
+    """
+    schema = _load(_DATASET_SCHEMA)
+    fields = schema["fields"]
+    declared = fields["properties"]
+    required = set(fields.get("required", ()))
+
+    def kind_of(value: Any) -> str:
+        # ``bool`` before ``int``: ``True`` is an int in Python, and "integer"
+        # is not what a JSON Schema ``boolean`` accepts.
+        if isinstance(value, bool):
+            return "boolean"
+        if isinstance(value, int):
+            return "integer"
+        if isinstance(value, float):
+            return "number"
+        if isinstance(value, str):
+            return "string"
+        return type(value).__name__
+
+    def check(row: dict[str, Any], what: str) -> None:
+        missing = required - set(row)
+        assert not missing, f"{what} omits required fields: {sorted(missing)}"
+
+        for key, value in row.items():
+            spec = declared.get(key)
+            assert spec is not None, (
+                f"{what} carries {key!r}, which the dataset schema does not "
+                "declare. Undeclared fields are dropped without a word, so the "
+                "row would look complete and be missing data."
+            )
+            assert value is not None, (
+                f"{what} carries {key!r} as null. A JSON Schema type does not "
+                "admit null: the platform rejects the item and every row in "
+                "the batch goes with it. That is the defect that emptied all "
+                "three live runs."
+            )
+            want = spec.get("type")
+            got = kind_of(value)
+            type_ok = got in ("integer", "number") if want == "number" else got == want
+            assert type_ok, (
+                f"{what} carries {key!r} as {got}, but the dataset schema "
+                f"declares it {want!r}. The push is refused, and so is every "
+                "other row in the same batch."
+            )
+            enum = spec.get("enum")
+            if enum is not None:
+                assert value in enum, (
+                    f"{what} carries {key!r} = {value!r}, which is not one of "
+                    f"the {len(enum)} declared values."
+                )
+
+    import sitemap_core.models as models
+
+    plain = models.UrlRecord(
+        url="https://example.com/a", normalizedUrl="https://example.com/a"
+    ).to_dict()
+    # lastmodRaw is deliberately unparseable: a date that will not parse must
+    # leave lastmodIso absent rather than null or a fabricated value.
+    populated = models.UrlRecord(
+        url="https://example.com/b",
+        normalizedUrl="https://example.com/b",
+        sourceSitemap="https://example.com/sitemap.xml",
+        depth=1,
+        checked=True,
+        statusCode=200,
+        contentType="text/html",
+        lastmodRaw="2023-13-45",
+        lastmodIso=None,
+        priority=0.5,
+        changeFrequency="daily",
+        hasImages=True,
+        alternateCount=2,
+    ).to_dict()
+    failed = models.UrlRecord(
+        url="https://example.com/c",
+        normalizedUrl="https://example.com/c",
+        checked=True,
+        errorType=ErrorType.REDIRECT_LOOP,
+        errorMessage="too many redirects",
+    ).to_dict()
+
+    for row, what in (
+        (plain, "an untouched UrlRecord"),
+        (populated, "a fully populated UrlRecord"),
+        (failed, "a failed UrlRecord"),
+    ):
+        check(row, what)
+
+    assert "errorType" not in plain, (
+        "an untouched UrlRecord now carries errorType. Absent is how a plain "
+        "success says 'no problem', and a row that sets it is a row the "
+        "Problems view will list."
+    )
+
+    readme = (_ACTOR_DIR / "README.md").read_text(encoding="utf-8")
+    example = None
+    for block in re.findall(r"```json\n(.*?)```", readme, re.DOTALL):
+        if '"normalizedUrl"' in block:
+            example = json.loads(block)
+            break
+    assert example is not None, (
+        "the store README no longer contains a worked example of a dataset "
+        "row. It is where a user first learns what the columns mean, and "
+        "nothing else in this file reads it."
+    )
+    check(example, "the row the README shows")
+
+
+def test_a_run_that_delivered_nothing_does_not_report_success() -> None:
+    """Zero rows in the dataset is two different stories; only one is success.
+
+    Three live runs each reported "Succeeded 200 URLs from 24/24 sitemaps"
+    behind an empty dataset and exited 0. Every batch had been refused by the
+    platform's schema check and the failure was logged and dropped. The fix is
+    not only the serialization — it is refusing to let "the dataset is empty"
+    be read as fine.
+
+    The hard part is the pair this function has to keep apart. A run cut at
+    `maxTotalChargeUsd` **also** ends with zero rows and a summary full of
+    counted URLs, and that one is correct behaviour: the user asked for the
+    cut, `SUMMARY` says so, and the exit stays 0. Same observable state,
+    opposite verdict. So the verdict is a function, and it is tested here
+    directly rather than through `main`, which would need the Apify SDK's
+    runtime to reach.
+
+    Case 6 is the one that would have shipped a new bug on the way to fixing
+    the old one: a run that is *both* cut on purpose *and* has refused batches
+    must still be a failure, because "we stopped on purpose" is not an account
+    of rows that were lost by accident.
+    """
+    import main as actor_main
+
+    verdict = actor_main._delivery_verdict
+
+    def case(
+        *,
+        produced: int,
+        delivered: int,
+        lost: int = 0,
+        lost_batches: int = 0,
+        cut_on_purpose: bool = False,
+        want_failed: bool,
+        want_fatal: bool = False,
+        want_truncate_reason: str | None = None,
+        label: str,
+    ) -> None:
+        got = verdict(
+            produced=produced,
+            delivered=delivered,
+            lost=lost,
+            lost_batches=lost_batches,
+            cut_on_purpose=cut_on_purpose,
+        )
+        assert got.failed is want_failed, f"{label}: failed={got.failed}"
+        assert got.fatal is want_fatal, f"{label}: fatal={got.fatal}"
+        assert got.truncate_reason == want_truncate_reason, (
+            f"{label}: truncate_reason={got.truncate_reason!r}"
+        )
+        assert (got.reason is None) is (not want_failed), (
+            f"{label}: a verdict that failed must say why, and one that did "
+            f"not must stay silent; got {got.reason!r}"
+        )
+
+    case(
+        label="1 everything delivered",
+        produced=200, delivered=200,
+        want_failed=False,
+    )
+    case(
+        label="2 a site with no sitemap",
+        produced=0, delivered=0,
+        want_failed=False,
+    )
+    case(
+        label="3 every batch refused",
+        produced=200, delivered=0, lost=200, lost_batches=4,
+        want_failed=True, want_fatal=True,
+    )
+    case(
+        label="4 cut at the charge limit, nothing pushed",
+        produced=200, delivered=0, lost=0, lost_batches=0,
+        cut_on_purpose=True,
+        want_failed=False,
+    )
+    case(
+        label="5 some batches refused, the rest delivered",
+        produced=200, delivered=199, lost=1, lost_batches=1,
+        want_failed=True, want_fatal=False,
+        want_truncate_reason="push_failed",
+    )
+    case(
+        label="6 cut on purpose AND some batches refused",
+        produced=200, delivered=100, lost=20, lost_batches=1,
+        cut_on_purpose=True,
+        want_failed=True, want_fatal=False,
+        want_truncate_reason="push_failed",
+    )
+    case(
+        label="7 cut at the charge limit after a partial delivery",
+        produced=200, delivered=100, lost=0, lost_batches=0,
+        cut_on_purpose=True,
+        want_failed=False,
+    )
+    case(
+        label="8 nothing arrived and nothing explained it",
+        produced=200, delivered=0, lost=0, lost_batches=0,
+        want_failed=True, want_fatal=True,
+    )
+
+    total = verdict(
+        produced=200, delivered=0, lost=200, lost_batches=4, cut_on_purpose=False
+    )
+    assert "200" in (total.reason or ""), (
+        "the total-loss message has to name how many rows were lost, or the "
+        "user is left to find the number in the summary themselves"
+    )
+    assert "failure, not a truncation" in (total.reason or ""), (
+        "the one sentence that separates this from a budget cut has to be in "
+        "the message, because the status line is all most people read"
+    )
 
 
 CASES = [
@@ -361,6 +691,9 @@ CASES = [
     test_the_published_error_enum_is_the_code_error_enum,
     test_the_output_schema_declares_the_fields_the_rows_carry,
     test_the_output_schema_points_at_records_the_code_actually_writes,
+    test_the_cross_entry_is_countable_rather_than_merely_clickable,
+    test_every_emitted_row_is_a_row_the_platform_will_store,
+    test_a_run_that_delivered_nothing_does_not_report_success,
 ]
 
 
