@@ -48,7 +48,7 @@ CHARGE_EVENT = "apify-default-dataset-item"
 # plan asks for: every click becomes an issue, and issues can be counted. When
 # the monitor has a real listing, change this one string and the offer in
 # README.md follows it.
-SUPPORT_URL = "https://github.com/apify-actors/sitemap-extractor/issues/new"
+SUPPORT_URL = "https://github.com/Chasen1992/sitemap-extractor/issues/new"
 
 # Key-value store records written alongside the dataset.
 SUMMARY_KEY = "SUMMARY"

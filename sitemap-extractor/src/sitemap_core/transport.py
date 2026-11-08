@@ -52,7 +52,7 @@ log = logging.getLogger(__name__)
 # is precisely the compliance smell we refuse to copy from the competitor.
 USER_AGENT = (
     "sitemap-extractor/1.0 "
-    "(+https://github.com/apify-actors/sitemap-extractor; "
+    "(+https://github.com/Chasen1992/sitemap-extractor; "
     "reads public sitemaps; respects robots.txt and Retry-After)"
 )
 
