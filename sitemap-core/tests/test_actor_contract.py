@@ -259,6 +259,73 @@ def test_the_output_schema_declares_the_fields_the_rows_carry() -> None:
     )
 
 
+def test_the_output_schema_points_at_records_the_code_actually_writes() -> None:
+    """The store listing will not publish without an output schema.
+
+    It is a map of output IDs to URL templates, and a template is a promise
+    about what exists at the other end: ``/records/SUMMARY`` is only a working
+    link if something writes a record called ``SUMMARY``. The same defect class
+    as the support links, which shipped pointing at a repository that was not
+    there — a link nobody clicks is a bug nobody finds.
+
+    Checked against the constants in ``src/main.py``, because that is where the
+    writing happens. Reading the source rather than importing it, for the same
+    reason as above.
+    """
+    actor = _load(_ACTOR_JSON)
+    assert actor.get("output") == "./output_schema.json", (
+        f"actor.json does not declare an output schema ({actor.get('output')!r}); "
+        "the Store refuses to publish without one"
+    )
+
+    output_path = (_ACTOR_DIR / ".actor" / "output_schema.json").resolve()
+    assert output_path.is_file(), f"actor.json points at {output_path}, which is missing"
+    schema = _load(output_path)
+
+    assert schema.get("actorOutputSchemaVersion") == 1, schema.get("actorOutputSchemaVersion")
+    assert schema.get("title"), "the output schema needs a title"
+    properties = schema.get("properties")
+    assert isinstance(properties, dict) and properties, "the output schema has no outputs"
+
+    source = _MAIN_PY.read_text(encoding="utf-8")
+    written = set(re.findall(r'^[A-Z_]+_KEY\s*=\s*"([A-Z_]+)"\s*$', source, re.M))
+    assert written, "could not find the record-key constants in src/main.py"
+
+    promised: set[str] = set()
+    uses_dataset = False
+    for output_id, spec in properties.items():
+        template = spec.get("template")
+        assert template, f"output {output_id!r} has no template"
+        assert spec.get("title"), f"output {output_id!r} has no title"
+
+        match = re.search(r"\{\{\s*links\.apiDefaultKeyValueStoreUrl\s*\}\}/records/([A-Za-z0-9_-]+)", template)
+        if match:
+            promised.add(match.group(1))
+        elif "links.apiDefaultDatasetUrl" in template:
+            uses_dataset = True
+        else:
+            raise AssertionError(
+                f"output {output_id!r} has a template neither the default dataset "
+                f"nor a key-value record: {template!r}"
+            )
+
+    assert uses_dataset, (
+        "no output links the default dataset, which is where Actor.push_data puts "
+        "the rows — the run's actual result would be undiscoverable"
+    )
+
+    phantom = promised - written
+    assert not phantom, (
+        f"the output schema links key-value records nothing writes: {sorted(phantom)}. "
+        f"src/main.py writes {sorted(written)}."
+    )
+    unlinked = written - promised
+    assert not unlinked, (
+        f"src/main.py writes records the output schema never links: {sorted(unlinked)}. "
+        "They exist in the run but a user following the output tabs cannot find them."
+    )
+
+
 # --------------------------------------------------------------------------
 
 
@@ -271,6 +338,7 @@ CASES = [
     test_the_input_schema_uses_no_keywords_the_platform_rejects,
     test_the_published_error_enum_is_the_code_error_enum,
     test_the_output_schema_declares_the_fields_the_rows_carry,
+    test_the_output_schema_points_at_records_the_code_actually_writes,
 ]
 
 
