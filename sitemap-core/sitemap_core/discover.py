@@ -14,6 +14,7 @@ salvaged instead of discarded, and gzip is bounded by ``max_output_bytes``.
 from __future__ import annotations
 
 import logging
+from collections import Counter
 from dataclasses import dataclass, field
 from urllib.parse import urlsplit
 
@@ -312,10 +313,67 @@ def _mark_empty_discovery(result: WalkResult) -> None:
             continue
         record.ok = False
         record.errorType = ErrorType.NO_SITEMAP
-        record.errorMessage = (
-            "no sitemap found at this site: robots.txt lists none and no "
-            "well-known sitemap path responded"
+        record.errorMessage = _empty_discovery_reason(result)
+
+
+def _is_robots_path(url: str) -> bool:
+    """True when ``url`` is a robots.txt fetch rather than a sitemap candidate.
+
+    Matched on the path and not the whole URL because USP joins some
+    robots.txt paths with a doubled slash, which leaves the path looking like
+    ``//robots.txt``.
+    """
+    path = urlsplit(url).path.lower()
+    return path == "/robots.txt" or path.endswith("/robots.txt")
+
+
+def _empty_discovery_reason(result: WalkResult) -> str:
+    """A message that claims only what the walk actually observed.
+
+    The wording this replaces was a fixed string asserting two things —
+    "robots.txt lists none" and "no well-known sitemap path responded" — and
+    on a soft-404 site both are false. Such a site 302s every missing path to
+    its own error page: robots.txt is never read, and the paths do respond,
+    with HTML. Observed on a run whose log then carried 23 requests and 23
+    claims the tool had no basis for.
+
+    A message that overstates what was seen is worse than no message, because
+    the reader has no way to check it. So this is assembled from
+    ``failure_by_url``, which is the record of what was fetched and what came
+    back, and it falls back to "was not consulted" rather than inventing an
+    observation when the fetch did not happen.
+    """
+    robots = [
+        item
+        for url, item in result.failure_by_url.items()
+        if _is_robots_path(url)
+    ]
+    if robots:
+        # Several spellings of robots.txt can be fetched (USP's doubled slash
+        # among them); the common outcome is the one worth reporting.
+        error_type, message = Counter(robots).most_common(1)[0][0]
+        robots_part = f"robots.txt could not be read ({message or error_type.value})"
+    elif any(r.kind == "robots" for r in result.sitemaps):
+        robots_part = "robots.txt named no sitemap"
+    else:
+        robots_part = "robots.txt was not consulted"
+
+    candidates = [
+        item
+        for url, item in result.failure_by_url.items()
+        if not _is_robots_path(url)
+    ]
+    if candidates:
+        counts = Counter(error_type.value for error_type, _ in candidates)
+        most_common = counts.most_common(1)[0][0]
+        paths_part = (
+            f"{len(candidates)} candidate sitemap URL(s) tried, none served a "
+            f"sitemap (most common outcome: {most_common})"
         )
+    else:
+        paths_part = "no candidate sitemap URL was tried"
+
+    return f"no sitemap found at this site: {robots_part}; {paths_part}"
 
 
 def _pages_kind(node: AbstractSitemap) -> str:

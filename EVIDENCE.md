@@ -94,7 +94,7 @@ So end-to-end coverage is not a substitute for testing the decision itself:
 Every fixture is seeded with a direct sitemap URL (`/fixtures/plain.xml`), so
 the walk takes the `direct` branch. `sitemap_tree_for_homepage` — the branch a
 user hits by typing a **domain** — is never called by the corpus, and the
-synthetic tree it builds is never described by it. Four defects lived there.
+synthetic tree it builds is never described by it. Six defects lived there.
 
 | # | What the run reported | What was true |
 | --- | --- | --- |
@@ -102,6 +102,8 @@ synthetic tree it builds is never described by it. Four defects lived there.
 | 2 | `go.dev` → `ok: true, kind: "sitemapindex"`, `1/1 sitemaps succeeded` | The site publishes no sitemap at all. robots.txt lists none; every well-known path 404s |
 | 3 | `www.apify.com` → `pagesFound: 922814` on the website node **and** on the index beneath it | 922,814 URLs, counted once per level of index above them |
 | 4 | A site publishing one sitemap index reported **two** | robots.txt and a well-known path name the same file; USP spells one of them with a doubled slash, so it was recorded twice |
+| 5 | `robots.txt` answering HTML → *"HTML document returned where **a sitemap** was expected"* | The request was for `robots.txt`. No sitemap was ever expected there; the tool made the request itself |
+| 6 | No sitemap found → *"robots.txt lists none and no well-known sitemap path responded"* | On a soft-404 site, **neither clause is true**: robots.txt is never read, and the paths do respond, with HTML |
 
 Defect 1 is the one that matters. The sniffer classifies every fetched body,
 and it called `User-agent: *` *"neither XML, a text sitemap, nor recognizable
@@ -112,21 +114,29 @@ it is done. It was not a cosmetic number; it was a wrong answer about the
 site, and half the self-test below was measuring it.
 
 Defects 2–4 changed a number the user reads; none of them changed a single URL
-in the output of a run that found anything.
+in the output of a run that found anything. Defects 5–6 changed no number at
+all — they changed **what the tool claimed to have seen**.
 
 | | |
 | --- | --- |
-| Fixed in | `sniff.py` (recognise robots.txt, and check it before the challenge sweep), `models.py` (`NO_SITEMAP`, `SYNTHETIC_KINDS`), `discover.py` (`_collect_sitemap_records`, `_mark_empty_discovery`), `pipeline.py` (count only real sitemap files) |
-| Rule now | robots.txt is readable content and is checked before the block-page markers it can legitimately contain; discovery scaffolding is labelled `website`/`robots` and never counted as a sitemap file; `pagesFound` counts the file, not the subtree; one record per file, identified by `normalize_url` |
-| Test added | `tests/test_discovery.py` — 9 cases against a local server with a **homepage** seed, the branch no fixture reaches |
-| Result | **9 / 9**, and the corpus re-run afterwards: **28 / 28 (100.0%)**, `runs killed: none` — `fake_gz.xml.gz` still `not_gzip`, `html_challenge.xml` still caught |
-| Live re-test | `go.dev` → one record, `kind: website`, `ok: false`, `errorType: no_sitemap`, `sitemapsAttempted 0`, `errorBreakdown {"no_sitemap": 1}` — and a sitemap named **only** in robots.txt is now found |
+| Fixed in | `sniff.py` (recognise robots.txt, and check it before the challenge sweep; name the thing the request was for), `models.py` (`NO_SITEMAP`, `SYNTHETIC_KINDS`), `discover.py` (`_collect_sitemap_records`, `_mark_empty_discovery`, `_empty_discovery_reason`), `pipeline.py` (count only real sitemap files) |
+| Rule now | robots.txt is readable content and is checked before the block-page markers it can legitimately contain; discovery scaffolding is labelled `website`/`robots` and never counted as a sitemap file; `pagesFound` counts the file, not the subtree; one record per file, identified by `normalize_url`; **a message may only assert what was actually fetched and what actually came back** |
+| Test added | `tests/test_discovery.py` — 18 cases against a local server with a **homepage** seed, the branch no fixture reaches |
+| Result | **18 / 18**, and the corpus re-run afterwards: **28 / 28 (100.0%)**, `runs killed: none` — `fake_gz.xml.gz` still `not_gzip`, `html_challenge.xml` still caught |
+| Regression proof | Restoring the two old wordings turns **8** of the 18 red, each naming the defect; the sitemap-path case stays green, so it is not "any change fails" |
+| Live re-test | `go.dev` → one record, `kind: website`, `ok: false`, `errorType: no_sitemap`, `sitemapsAttempted 0`, `errorBreakdown {"no_sitemap": 1}` — and a sitemap named **only** in robots.txt is now found. `chinafilm.gov.cn` → `robots.txt could not be read (HTML document returned where robots.txt was expected); 8 candidate sitemap URL(s) tried, none served a sitemap (most common outcome: not_xml)` |
 
-The pattern is the point. Three of the four were visible in a live run's own
-output — a `no_sitemap` verdict printed next to `sitemaps 1/1`, a page count
-that appeared twice — and were found by **reading the output**, not by a test.
-The fourth was found by distrusting a `no_sitemap` verdict and probing the site
-by hand. None of them would have been found by running more fixtures.
+The pattern is the point. Three of the first four were visible in a live run's
+own output — a `no_sitemap` verdict printed next to `sitemaps 1/1`, a page
+count that appeared twice — and were found by **reading the output**, not by a
+test. The fourth was found by distrusting a `no_sitemap` verdict and probing
+the site by hand. Defects 5 and 6 were found the same way: the log said
+*"HTML document returned where a sitemap was expected"* about a `robots.txt`
+request, and *"no well-known sitemap path responded"* about paths that had
+answered. **Both sentences were about the tool's own requests, and both were
+false.** Neither can be found by running more fixtures either — the corpus
+cannot reach this code — and neither can be found by trusting the message,
+which is the only thing a user has.
 
 ### 3. The summary's account of itself
 
@@ -307,11 +317,13 @@ construction has to be tested directly — `tests/test_normalize.py` and
 `tests/test_discovery.py` exist for that one reason.
 
 **It does not prove the reporting is right, or that discovery is complete.**
-The corpus checks that hostile files are survived and typed. Six defects were
-live while it reported 28/28: one wrong verdict on which URLs were ours, four
-wrong numbers about what discovery found, and one wrong claim that the output
-was complete. One of them made the tool say "this site has no sitemap" about
-sites that publish one.
+The corpus checks that hostile files are survived and typed. Eight defects
+were live while it reported 28/28: one wrong verdict on which URLs were ours,
+four wrong numbers about what discovery found, one wrong claim that the output
+was complete, and two claims about what the tool had observed that it had
+never observed. One of them made the tool say "this site has no sitemap" about
+sites that publish one; two of them made it describe its own requests
+incorrectly.
 
 ## Ten real domains
 

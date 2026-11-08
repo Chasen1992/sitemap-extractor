@@ -36,6 +36,23 @@ Three of these four changed a **number the user reads**, and one changed
 output of a run that found anything. That is what an untested path looks like:
 the corpus reports 28/28 throughout, because it cannot reach here.
 
+Two more arrived later, and they are a fifth kind: not a wrong number and not
+a missing sitemap, but a **message that claims more than the tool observed**.
+
+5. ``sniff`` reported "HTML document returned where a sitemap was expected"
+   about a ``robots.txt`` fetch. No sitemap was ever expected there — the
+   request was for robots.txt, which the tool itself made.
+
+6. ``_mark_empty_discovery`` reported "robots.txt lists none and no well-known
+   sitemap path responded". On a soft-404 site — one that 302s every missing
+   path to its own error page and serves that page 200 — neither clause is
+   true: robots.txt is never read, and the paths *do* respond, with HTML.
+
+Both were found by a single run against ``chinafilm.gov.cn``, whose log
+carried 23 requests and 23 statements the code had no way to know. Neither is
+fixable by reading the output; both required reading the source to notice
+that the words and the observations were unrelated. See section 4 below.
+
 Run standalone::
 
     python tests/test_discovery.py
@@ -55,8 +72,13 @@ sys.path.insert(0, str(_TESTS_DIR))
 sys.path.insert(0, str(_TESTS_DIR.parents[0]))
 
 from sitemap_core.budget import Budget  # noqa: E402
-from sitemap_core.discover import SYNTHETIC_KINDS, walk  # noqa: E402
-from sitemap_core.models import ErrorType  # noqa: E402
+from sitemap_core.discover import (  # noqa: E402
+    SYNTHETIC_KINDS,
+    WalkResult,
+    _empty_discovery_reason,
+    walk,
+)
+from sitemap_core.models import ErrorType, SitemapRecord  # noqa: E402
 from sitemap_core.normalize import normalize_url  # noqa: E402
 from sitemap_core.sniff import ContentKind, sniff  # noqa: E402
 from sitemap_core.transport import CompliantWebClient  # noqa: E402
@@ -345,6 +367,152 @@ def test_a_robots_txt_naming_a_captcha_path_is_still_readable() -> None:
 
 
 # --------------------------------------------------------------------------
+# 4. messages that claim more than the tool observed
+# --------------------------------------------------------------------------
+#
+# The run that exposed this was against a site whose every missing path 302s
+# to its own error page: 23 requests, and the log carried 23 statements the
+# code had no way to know. Two of them were written into the source.
+#
+#   sniff:    "HTML document returned where a sitemap was expected"
+#             — said about a robots.txt fetch, where no sitemap was expected.
+#   discover: "robots.txt lists none and no well-known sitemap path responded"
+#             — robots.txt was never read, and the paths did respond, with HTML.
+#
+# Both are the same defect class as everything else in this file: a claim the
+# code cannot support. These tests fail while either is present.
+
+_HTML_ERROR_PAGE = (
+    "text/html",
+    "<!doctype html>\n<html><head><title>404</title></head><body>not found</body></html>\n",
+)
+
+
+def test_html_at_robots_txt_is_not_reported_as_a_missing_sitemap() -> None:
+    """The request was for robots.txt. Say that, not "a sitemap"."""
+    result = sniff(
+        b"<!doctype html>\n<html><head><title>404</title></head></html>\n",
+        content_type="text/html",
+        url="https://example.com/robots.txt",
+    )
+    assert result.error_type is ErrorType.NOT_XML, (result.error_type, result.detail)
+    assert "robots.txt" in result.detail, result.detail
+    assert "a sitemap" not in result.detail, result.detail
+
+
+def test_html_at_a_sitemap_path_still_says_a_sitemap() -> None:
+    """The positive control: the sitemap wording must not drift either."""
+    result = sniff(
+        b"<!doctype html>\n<html><head><title>404</title></head></html>\n",
+        content_type="text/html",
+        url="https://example.com/sitemap.xml",
+    )
+    assert result.error_type is ErrorType.NOT_XML, (result.error_type, result.detail)
+    assert result.detail == "HTML document returned where a sitemap was expected", (
+        result.detail
+    )
+
+
+def test_html_at_robots_txt_with_a_query_string_is_still_robots_txt() -> None:
+    """The path is what identifies the request, not the whole URL."""
+    result = sniff(
+        b"<!doctype html>\n<html><head><title>404</title></head></html>\n",
+        content_type="text/html",
+        url="https://example.com/robots.txt?ts=1",
+    )
+    assert "robots.txt" in result.detail, result.detail
+
+
+def test_robots_txt_that_could_not_be_read_is_said_to_be_unreadable() -> None:
+    result = WalkResult()
+    result.failure_by_url["https://example.com/robots.txt"] = (
+        ErrorType.NOT_XML,
+        "HTML document returned where robots.txt was expected",
+    )
+    message = _empty_discovery_reason(result)
+    assert message.startswith("no sitemap found at this site: "), message
+    assert "robots.txt could not be read" in message, message
+    assert "HTML document returned where robots.txt was expected" in message, message
+    assert "robots.txt lists none" not in message, (
+        "the file was not read, so it cannot have listed anything: " + message
+    )
+
+
+def test_robots_txt_read_and_holding_nothing_is_said_to_have_held_nothing() -> None:
+    result = WalkResult()
+    result.sitemaps.append(SitemapRecord(url="https://example.com/robots.txt", kind="robots"))
+    message = _empty_discovery_reason(result)
+    assert "robots.txt named no sitemap" in message, message
+    assert "could not be read" not in message, message
+
+
+def test_robots_txt_never_fetched_is_said_to_be_unconsulted() -> None:
+    """Not fetched is a different fact from fetched-and-empty. Never blur them."""
+    message = _empty_discovery_reason(WalkResult())
+    assert "robots.txt was not consulted" in message, message
+    assert "no candidate sitemap URL was tried" in message, message
+
+
+def test_soft_404_site_never_claims_the_paths_did_not_respond() -> None:
+    """The chinafilm.gov.cn shape, and the one that started this.
+
+    Every missing path 302s to the site's own error page and that page is
+    served 200, so the paths *did* respond. The old wording said they did
+    not, which is the opposite of what happened and could not be checked by
+    any reader.
+    """
+    result = WalkResult()
+    result.failure_by_url["https://example.com/robots.txt"] = (
+        ErrorType.NOT_XML,
+        "HTML document returned where robots.txt was expected",
+    )
+    for name in ("sitemap.xml", "wp-sitemap.xml", "sitemap.txt"):
+        result.failure_by_url[f"https://example.com/{name}"] = (
+            ErrorType.NOT_XML,
+            "HTML document returned where a sitemap was expected",
+        )
+    message = _empty_discovery_reason(result)
+    assert "no well-known sitemap path responded" not in message, message
+    assert "3 candidate sitemap URL(s) tried" in message, message
+    assert "most common outcome: not_xml" in message, message
+
+
+def test_the_stated_candidate_count_is_the_number_actually_tried() -> None:
+    result = WalkResult()
+    result.failure_by_url["https://example.com/robots.txt"] = (
+        ErrorType.NOT_XML,
+        "HTML document returned where robots.txt was expected",
+    )
+    for i in range(7):
+        result.failure_by_url[f"https://example.com/p{i}.xml"] = (
+            ErrorType.HTTP_ERROR,
+            "HTTP 404",
+        )
+    message = _empty_discovery_reason(result)
+    assert "7 candidate sitemap URL(s) tried" in message, message
+    assert "most common outcome: http_error" in message, message
+    assert "robots.txt could not be read" in message, message
+
+
+def test_end_to_end_a_soft_404_site_reports_what_it_actually_got() -> None:
+    """Both fixes together, through a real walk.
+
+    robots.txt answers with HTML and every sitemap path 404s. The run must
+    conclude there is no sitemap — that part was already right — and it must
+    describe that conclusion in terms of what came back.
+    """
+    result = walk_site({"/robots.txt": _HTML_ERROR_PAGE})
+    refused = [r for r in result.sitemaps if r.errorType is ErrorType.NO_SITEMAP]
+    assert refused, [(r.kind, r.ok, r.errorType) for r in result.sitemaps]
+    for record in refused:
+        message = record.errorMessage or ""
+        assert "robots.txt lists none" not in message, message
+        assert "no well-known sitemap path responded" not in message, message
+        assert "robots.txt" in message, message
+        assert "candidate sitemap URL(s) tried" in message, message
+
+
+# --------------------------------------------------------------------------
 
 CASES = [
     test_site_with_no_sitemap_is_not_a_success,
@@ -356,6 +524,15 @@ CASES = [
     test_robots_txt_is_readable_content,
     test_a_sitemap_named_only_in_robots_txt_is_found,
     test_a_robots_txt_naming_a_captcha_path_is_still_readable,
+    test_html_at_robots_txt_is_not_reported_as_a_missing_sitemap,
+    test_html_at_a_sitemap_path_still_says_a_sitemap,
+    test_html_at_robots_txt_with_a_query_string_is_still_robots_txt,
+    test_robots_txt_that_could_not_be_read_is_said_to_be_unreadable,
+    test_robots_txt_read_and_holding_nothing_is_said_to_have_held_nothing,
+    test_robots_txt_never_fetched_is_said_to_be_unconsulted,
+    test_soft_404_site_never_claims_the_paths_did_not_respond,
+    test_the_stated_candidate_count_is_the_number_actually_tried,
+    test_end_to_end_a_soft_404_site_reports_what_it_actually_got,
 ]
 
 

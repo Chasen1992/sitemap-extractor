@@ -121,6 +121,14 @@ def sniff(
     ct = (content_type or "").lower()
     ce = (content_encoding or "").lower()
     path = url.split("?", 1)[0].lower()
+    # What this request was looking for. robots.txt is fetched as part of
+    # discovery, and calling it "a sitemap" in an error message is wrong about
+    # the request the tool itself made.
+    expected = (
+        "robots.txt"
+        if path.endswith("/robots.txt") or path == "robots.txt"
+        else "a sitemap"
+    )
 
     if not head or observed_length == 0:
         return SniffResult(
@@ -168,7 +176,7 @@ def sniff(
         # Declared or named as gzip but there is no gzip magic. Could be a
         # renamed XML (harmless) or an HTML error page (garbage). Decide on
         # the actual bytes, not on the extension.
-        probe = _classify_plain(_strip_bom(head))
+        probe = _classify_plain(_strip_bom(head), expected=expected)
         if probe.kind is ContentKind.XML:
             return SniffResult(
                 ContentKind.XML, detail="named .gz but is plain XML", head=head
@@ -186,11 +194,22 @@ def sniff(
             head=head,
         )
 
-    return _classify_plain(_strip_bom(head), head=head)
+    return _classify_plain(_strip_bom(head), head=head, expected=expected)
 
 
-def _classify_plain(body: bytes, *, head: bytes = b"") -> SniffResult:
-    """Classify non-gzipped bytes."""
+def _classify_plain(
+    body: bytes, *, head: bytes = b"", expected: str = "a sitemap"
+) -> SniffResult:
+    """Classify non-gzipped bytes.
+
+    ``expected`` names what the request was looking for and appears in the
+    message that reports an HTML body. It is not decoration: ``robots.txt`` is
+    never expected to be a sitemap, and telling a user "HTML document returned
+    where a sitemap was expected" about a robots.txt fetch is a false statement
+    about their own request. Observed on a site whose every missing path 302s
+    to its own error page — 23 requests, and the log read as 23 claims the
+    tool had no basis for.
+    """
     stripped = body.lstrip()
     if not stripped:
         return SniffResult(
@@ -203,7 +222,7 @@ def _classify_plain(body: bytes, *, head: bytes = b"") -> SniffResult:
         return SniffResult(ContentKind.XML, head=head or body)
 
     if _HTML_HEAD.match(stripped):
-        detail = "HTML document returned where a sitemap was expected"
+        detail = f"HTML document returned where {expected} was expected"
         if looks_like_challenge(body):
             detail = "bot-challenge or block page detected"
             return SniffResult(
