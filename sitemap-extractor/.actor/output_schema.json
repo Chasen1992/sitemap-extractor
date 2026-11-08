@@ -4,21 +4,25 @@
   "description": "One row per URL the site publishes, plus three key-value records that describe the run itself. The run summary is the one to read first: it says how many sitemaps were read, what went wrong, and whether the rows you have are the whole answer.",
   "properties": {
     "urls": {
+      "type": "string",
       "title": "URL rows",
       "description": "Every URL found in the site's published sitemaps, one row each, with optional HTTP status codes. Fields are documented in the output schema; errorType is an enum, so problems are filterable rather than free text.",
       "template": "{{links.apiDefaultDatasetUrl}}/items"
     },
     "summary": {
+      "type": "string",
       "title": "Run summary",
       "description": "What the run found and what it could not. Read truncated before concluding a site is small — it is true whenever maxUrls or a budget is why you did not get every URL, and truncateReason says which.",
       "template": "{{links.apiDefaultKeyValueStoreUrl}}/records/SUMMARY"
     },
     "sitemaps": {
+      "type": "string",
       "title": "Sitemap files",
       "description": "One record per sitemap file that was read, with its own status, kind and URL count. A site that publishes 24 sitemap files produces 24 records here.",
       "template": "{{links.apiDefaultKeyValueStoreUrl}}/records/SITEMAPS"
     },
     "nextStep": {
+      "type": "string",
       "title": "Next step",
       "description": "The run's closing note, including the offer to have these URLs watched for changes.",
       "template": "{{links.apiDefaultKeyValueStoreUrl}}/records/NEXT_STEP"

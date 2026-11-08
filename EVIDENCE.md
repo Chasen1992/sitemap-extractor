@@ -314,11 +314,39 @@ that can go stale on its own. Three did, and all three were found by hand.
 | `actor.json` `description` was 302 characters | Apify's limit is 300. Refused the same way, one round trip later |
 
 So the default is now one constant, `DEFAULT_MAX_URLS`, and the copies that
-cannot use it are pinned by `tests/test_actor_contract.py` (8 cases) — which
+cannot use it are pinned by `tests/test_actor_contract.py` (9 cases) — which
 also asserts the published `errorType` enum equals the code's enum **in both
 directions**, because an omitted value is silently un-filterable in the
 Console's Problems view and a listed value nobody emits is a promise nobody
 can keep.
+
+A fourth came from the platform rather than from the code, and was not drift
+but absence: the Store refused to publish with *"Add 'Output' schema(s) to the
+source code and rebuild the Actor before publishing."* `actor.json` had a
+`storages.dataset` schema and that is **not** the same thing — an output
+schema is the `output` key, a map of output IDs to URL templates, and it is a
+publishing prerequisite. It now exists as `.actor/output_schema.json`, and it
+is pinned by the ninth case for the same reason as the support links: a
+template is a promise about what exists at the other end, and
+`/records/SUMMARY` is only a working link if something writes a record called
+`SUMMARY`. Verified to fail both ways — naming a record nothing writes, and
+omitting a record the code does write.
+
+That schema was then refused by the platform's own validator. Apify's *Output
+object definition* table lists three fields per output — `title`,
+`description`, `template` — and the file was written from it. Build **1.0.4
+came back FAILED** after 0.6 s with `must have required property 'type'`. The
+field is not in that table. Every worked example in the same document sets
+`"type": "string"`, and the validator requires it: the table is wrong and the
+validator is the specification. Build 1.0.5 added `type` to all four outputs
+and succeeded.
+
+Third time in this project that a guard built from a specification missed the
+defect produced from the same specification. So the ninth case asserts `type`
+is `"string"` on every output — the exact value, not merely present, because
+the accepted set is published nowhere and a value outside the six documented
+examples would be a guess. Verified to fail both ways: delete `type`, or set it
+to `"object"`, and the case reports which output and why.
 
 **The first version of its `main.py` guard did not work.** It looked for a
 numeric literal in the fallback and missed it entirely: the call reads
@@ -339,7 +367,7 @@ not what it prints when the code is right.
 | --- | --- |
 | Fixed in | `models.py` (`DEFAULT_MAX_URLS`), `parse.py`, `pipeline.py`, `src/main.py`, `actor.json` |
 | Rule now | one constant for the shipped default; the schema copy, the platform field limits and the published error enum are asserted against the code, not trusted |
-| Test added | `tests/test_actor_contract.py` — 8 cases |
+| Test added | `tests/test_actor_contract.py` — 8 cases at the time; 9 today, the ninth being the output-schema case described above |
 | Result | **8 / 8**, and the full suite re-run afterwards: 5/5 + 9/9 + 18/18 + 28/28, `runs killed: none` |
 
 ## Reproducing
@@ -365,12 +393,20 @@ repository was published, and both by running the suites rather than by
 reasoning about the files.
 
 **Line endings.** The working copies on the machine the work was done on are
-CRLF; commits normalise to LF. Both forms were run in full:
+CRLF; commits normalise to LF. Both forms were run in full, on the same code:
 
 | tree | result |
 | --- | --- |
-| CRLF working copies | 28/28 (100.0%), runs killed: none, plus 5/5 + 9/9 + 18/18 + 8/8 |
-| pure LF checkout of the index | 28/28 (100.0%), runs killed: none, plus 5/5 + 9/9 + 18/18 + 8/8 |
+| CRLF working copies | 28/28 (100.0%), runs killed: none, plus 5/5 + 9/9 + 18/18 + 9/9 |
+| LF form of the same code, read from the index blobs | 28/28 (100.0%), runs killed: none, plus 5/5 + 9/9 + 18/18 + 9/9 |
+
+The LF row is worded that way because an *LF checkout* is not something this
+repository can produce. `git checkout-index` under the checked-in
+`* text=auto` wrote 82 of 90 files with CRLF even with `core.autocrlf=false` —
+`text=auto` defers to `core.eol`, and `core.eol` is `native` on Windows. Only
+reading the blobs with `git cat-file blob` bypasses the smudge filter; that
+export was 90 files, 0 containing CRLF, with all 5 `.gz` payloads byte-identical
+to the working copies.
 
 So line endings are not load-bearing for any fixture. Only the `.gz` payloads
 are pinned as binary, because their bytes are the thing under test.

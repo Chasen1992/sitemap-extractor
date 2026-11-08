@@ -271,6 +271,15 @@ def test_the_output_schema_points_at_records_the_code_actually_writes() -> None:
     Checked against the constants in ``src/main.py``, because that is where the
     writing happens. Reading the source rather than importing it, for the same
     reason as above.
+
+    ``type`` is asserted because the first version of this file did not, and the
+    build came back failed with ``must have required property 'type'``. The
+    schema had been written from Apify's own *Output object definition* table,
+    which lists ``title``, ``description`` and ``template`` and never mentions
+    ``type`` — while every worked example in the same document sets
+    ``"type": "string"``, and the validator requires it. The table is wrong and
+    the validator is the specification. A guard built from a wrong table does
+    not catch a defect built from the same wrong table.
     """
     actor = _load(_ACTOR_JSON)
     assert actor.get("output") == "./output_schema.json", (
@@ -297,6 +306,19 @@ def test_the_output_schema_points_at_records_the_code_actually_writes() -> None:
         template = spec.get("template")
         assert template, f"output {output_id!r} has no template"
         assert spec.get("title"), f"output {output_id!r} has no title"
+
+        # Every documented example uses "string" here whatever the template
+        # points at, and the field is required. Asserted as the exact value, not
+        # merely as present: the accepted set is not published anywhere, so the
+        # evidence is the examples, and a value outside them is a guess.
+        assert spec.get("type") == "string", (
+            f"output {output_id!r} has type {spec.get('type')!r}. Apify's "
+            "validator requires the field and all six worked examples in its "
+            "output-schema doc set it to 'string'. The doc's field table omits "
+            "it, which is how build 1.0.4 came back FAILED with \"must have "
+            "required property 'type'\" after the schema had been written from "
+            "that table."
+        )
 
         match = re.search(r"\{\{\s*links\.apiDefaultKeyValueStoreUrl\s*\}\}/records/([A-Za-z0-9_-]+)", template)
         if match:

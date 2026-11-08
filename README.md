@@ -30,7 +30,7 @@ python tests/test_actor_contract.py  # the store listing vs the code
 
 The fixtures are checked in, so this runs as-is. `tests/make_fixtures.py` regenerates all 28 on demand, including a 50 000-URL file and several deliberately broken `.gz` payloads.
 
-Current state: **28/28 fixtures**, plus **18/18**, **9/9**, **5/5** and **8/8** on the direct suites, no run killed. `EVIDENCE.md` records what that number does and does not prove — including the six defects that were live while the corpus reported 28/28, and the two test guards that passed on the exact defect each was written to catch.
+Current state: **28/28 fixtures**, plus **18/18** normalize, **9/9** discovery, **9/9** actor contract and **5/5** summary on the direct suites, no run killed. `EVIDENCE.md` records what that number does and does not prove — including the six defects that were live while the corpus reported 28/28, and the two test guards that passed on the exact defect each was written to catch.
 
 ## What it does not do
 

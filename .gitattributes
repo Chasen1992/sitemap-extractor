@@ -1,10 +1,18 @@
 # Commits normalise to LF; a Windows checkout gets CRLF back.
 #
 # Both forms were measured, not assumed. The corpus was run on the CRLF working
-# copies and then re-run on a pure LF checkout of the index:
+# copies, then re-run on the LF form of the same code — read out of the index
+# with `git cat-file blob`, which is 0 files containing CRLF and all 5 .gz
+# payloads byte-identical to the working copies:
 #
-#   CRLF working tree  28/28 (100.0%), runs killed: none, 5/5 9/9 18/18 8/8
-#   LF checkout        28/28 (100.0%), runs killed: none, 5/5 9/9 18/18 8/8
+#   CRLF working tree    28/28 (100.0%), runs killed: none, 5/5 9/9 18/18 9/9
+#   LF form of the code  28/28 (100.0%), runs killed: none, 5/5 9/9 18/18 9/9
+#
+# An "LF checkout" is not something you can produce here, which is why the
+# second row is worded that way. `git checkout-index` under this file's own
+# `* text=auto` wrote 82 of 90 files with CRLF even with `core.autocrlf=false`:
+# `text=auto` defers to `core.eol`, and `core.eol` is `native` on Windows.
+# Only reading the blobs bypasses the smudge filter.
 #
 # So line endings are not load-bearing for any fixture, and the platform
 # default is safe. Only *.gz is pinned, because those fixtures are gzip
