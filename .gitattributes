@@ -1,11 +1,17 @@
-# Commits normalise to LF; a Windows checkout gets CRLF back. The corpus was
-# measured on the CRLF working copies and re-measured on an LF checkout before
-# this file was settled on — the numbers are in EVIDENCE.md and both forms pass.
+# Commits normalise to LF; a Windows checkout gets CRLF back.
 #
-# *.gz is marked binary because those fixtures are gzip payloads whose bytes are
-# the thing under test. The other byte-sensitive fixtures (latin1.xml, the
-# deliberately-truncated files) git already classifies as binary on its own;
-# verified with `git check-attr` and a full checkout round-trip rather than
-# assumed from reading this.
+# Both forms were measured, not assumed. The corpus was run on the CRLF working
+# copies and then re-run on a pure LF checkout of the index:
+#
+#   CRLF working tree  28/28 (100.0%), runs killed: none, 5/5 9/9 18/18 8/8
+#   LF checkout        28/28 (100.0%), runs killed: none, 5/5 9/9 18/18 8/8
+#
+# So line endings are not load-bearing for any fixture, and the platform
+# default is safe. Only *.gz is pinned, because those fixtures are gzip
+# payloads whose bytes are the thing under test. The earlier version of this
+# file also claimed the other byte-sensitive fixtures were "already classified
+# as binary" by git — untrue; `git check-attr` and the add warnings both show
+# latin1.xml is handled as text. It passes in both forms anyway, which is why
+# no rule pins it.
 * text=auto
 *.gz binary
