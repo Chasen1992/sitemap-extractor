@@ -1,0 +1,57 @@
+C:\Python314\Lib\site-packages\requests\__init__.py:113: RequestsDependencyWarning: urllib3 (2.6.3) or chardet (7.4.0.post2)/charset_normalizer (3.4.6) doesn't match a supported version!
+  warnings.warn(
+sitemap-core adversarial fixture corpus
+==============================================================================
+XML sitemap root tag urlset detected without expected xmlns (value is ""), assuming is an XML sitemap.
+XML sitemap root tag urlset detected without expected xmlns (value is ""), assuming is an XML sitemap.
+Parsing sitemap from URL http://127.0.0.1:8765/fixtures/malformed.xml failed: not well-formed (invalid token): line 4, column 50
+Request for URL http://127.0.0.1:8765/fixtures/empty.xml failed: response body is empty
+Parsing sitemap from URL http://127.0.0.1:8765/fixtures/truncated.xml failed: no element found: line 6, column 0
+Request for URL http://127.0.0.1:8765/fixtures/truncated_body.xml failed: body read failed: peer closed connection without sending complete message body (received 200 bytes, expected 8192)
+Request for URL http://127.0.0.1:8765/fixtures/html_challenge.xml failed: bot-challenge or block page detected
+Request for URL http://127.0.0.1:8765/fixtures/robots_html.txt failed: HTML document returned where a sitemap was expected
+Parsing sitemap from URL http://127.0.0.1:8765/fixtures/billion_laughs.xml failed: Sitemap contained unexpected non-standard XML DOCTYPE. Parsing not supported for security reasons.
+Story URL # sitemap in plain text form doesn't look like an URL, skipping
+Unable to gunzip response for http://127.0.0.1:8765/fixtures/gzipped.xml.gz, maybe it's a non-gzipped sitemap: Unable to gunzip data: Not a gzipped file (b'<?')
+Unable to gunzip response for http://127.0.0.1:8765/fixtures/double_gzip.xml.gz, maybe it's a non-gzipped sitemap: Unable to gunzip data: Not a gzipped file (b'<?')
+Request for URL http://127.0.0.1:8765/fixtures/fake_gz.xml.gz failed: extension/encoding says gzip but body is not gzip
+Unable to gunzip response for http://127.0.0.1:8765/fixtures/renamed.xml.gz, maybe it's a non-gzipped sitemap: Unable to gunzip data: Not a gzipped file (b'<?')
+Request for URL http://127.0.0.1:8765/fixtures/gzip_bomb.xml.gz failed: gzip ratio 1027:1 exceeds limit 200:1
+fixture                   rows   secs   ok  detail
+------------------------------------------------------------------------------
+plain.xml                    4   1.30  PASS  rows=4 deduped=0 sitemap_errors=[] status={'cross_domain': 4}
+no_namespace.xml             3   1.24  PASS  rows=3 deduped=0 sitemap_errors=[] status={'cross_domain': 3}
+bad_prefix.xml               2   1.43  PASS  rows=2 deduped=0 sitemap_errors=[] status={'cross_domain': 2}
+malformed.xml                4   1.43  PASS  rows=4 deduped=1 sitemap_errors=[] status={'cross_domain': 4}
+empty.xml                    0   1.42  PASS  rows=0 deduped=0 sitemap_errors=['empty_body'] status={}
+truncated.xml                3   1.46  PASS  rows=3 deduped=2 sitemap_errors=[] status={'cross_domain': 3}
+truncated_body.xml           0   1.53  PASS  rows=0 deduped=0 sitemap_errors=['truncated'] status={}
+html_challenge.xml           0   1.63  PASS  rows=0 deduped=0 sitemap_errors=['html_challenge'] status={}
+robots_html.txt              0   1.40  PASS  rows=0 deduped=0 sitemap_errors=['not_xml'] status={}
+billion_laughs.xml           0   1.44  PASS  rows=0 deduped=0 sitemap_errors=['parse_error'] status={}
+news_image.xml               2   1.52  PASS  rows=2 deduped=0 sitemap_errors=[] status={'cross_domain': 2}
+bad_dates.xml               12   1.48  PASS  rows=12 deduped=0 sitemap_errors=[] status={'cross_domain': 12}
+idna.xml                     4   1.48  PASS  rows=4 deduped=0 sitemap_errors=[] status={'cross_domain': 4}
+latin1.xml                   3   1.46  PASS  rows=3 deduped=0 sitemap_errors=[] status={'cross_domain': 3}
+dup_entries.xml              5   1.45  PASS  rows=5 deduped=15 sitemap_errors=[] status={'cross_domain': 5}
+sitemap.txt                  4   1.50  PASS  rows=4 deduped=0 sitemap_errors=[] status={'cross_domain': 4}
+cross_domain.xml             4   1.33  PASS  rows=4 deduped=0 sitemap_errors=[] status={'cross_domain': 4}
+gzipped.xml.gz               4   1.48  PASS  rows=4 deduped=0 sitemap_errors=[] status={'cross_domain': 4}
+double_gzip.xml.gz           4   1.43  PASS  rows=4 deduped=0 sitemap_errors=[] status={'cross_domain': 4}
+fake_gz.xml.gz               0   1.40  PASS  rows=0 deduped=0 sitemap_errors=['not_gzip'] status={}
+renamed.xml.gz               4   1.44  PASS  rows=4 deduped=0 sitemap_errors=[] status={'cross_domain': 4}
+gzip_bomb.xml.gz             0   1.44  PASS  rows=0 deduped=0 sitemap_errors=['gzip_bomb'] status={}
+huge.xml                 50000   3.46  PASS  rows=50000 deduped=0 sitemap_errors=[] status={'cross_domain': 50000}
+index_of_index.xml           5   1.90  PASS  rows=5 deduped=5 sitemap_errors=[] status={'cross_domain': 5}
+index_mid.xml                6   2.09  PASS  rows=6 deduped=6 sitemap_errors=[] status={'cross_domain': 6}
+cyclic_a.xml                 2   1.78  PASS  rows=2 deduped=4 sitemap_errors=[] status={'cross_domain': 2}
+ssrf_lure.xml                5   1.36  PASS  rows=5 deduped=0 sitemap_errors=[] status={'cross_domain': 4, 'uncheck
+status_probe.xml             4   4.76  PASS  rows=4 deduped=4 sitemap_errors=[] status={'200': 2, '404': 1, '429': 
+Request for URL http://127.0.0.1:8765/fixtures/html_challenge.xml failed: bot-challenge or block page detected
+------------------------------------------------------------------------------
+fixtures handled : 28/28  (100.0%)
+acceptance line  : >= 98.0%
+runs killed      : none
+extra checks     : all passed (no garbage rows, SSRF strict, no test switches)
+
+VERDICT: PASS

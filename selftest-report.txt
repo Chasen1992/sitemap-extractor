@@ -1,0 +1,19 @@
+domain                         result                rows sitemaps     found   reqs    secs
+-------------------------------------------------------------------------------------------
+https://www.python.org         no_sitemap               0      0/0         0     24    20.1
+https://docs.python.org        ok                       7      1/1        35     23    10.0
+https://www.djangoproject.com  ok                     200      1/1      4092     25    14.5
+https://nodejs.org             ok                     200      2/2      8620     24    16.4
+https://go.dev                 no_sitemap               0      0/0         0     23    17.2
+https://react.dev              no_sitemap               0      0/0         0     31    13.1
+https://developer.mozilla.org  ok                     200    11/11    269964     33    30.4
+https://www.mozilla.org        no_sitemap               0      0/0         0     47    23.8
+https://www.kernel.org         no_sitemap               0      0/0         0     23     9.9
+https://www.apify.com          ok                     200    24/24   3691256     76   118.9
+-------------------------------------------------------------------------------------------
+
+domains run        : 10
+succeeded          : 5  (50.0%)
+  breakdown        : ok=5, truncated=0, no_sitemap=5, sitemap_unreadable=0, failed=0
+total elapsed      : 274.5s
+per domain, mean   : 27.5s

@@ -1,0 +1,196 @@
+{
+  "actorSpecification": 1,
+  "fields": {
+    "type": "object",
+    "properties": {
+      "url": {
+        "type": "string",
+        "description": "The URL exactly as the sitemap wrote it."
+      },
+      "normalizedUrl": {
+        "type": "string",
+        "description": "The same URL after normalization: fragment removed, percent-escapes and host case folded, default port dropped. Used for de-duplication. http and https, and www and the apex host, are kept distinct because they often serve different content."
+      },
+      "sourceSitemap": {
+        "type": "string",
+        "description": "Which sitemap file this URL was found in."
+      },
+      "depth": {
+        "type": "integer",
+        "description": "How many sitemap-index hops deep the source sitemap was. 0 means it came from the seed sitemap itself."
+      },
+      "checked": {
+        "type": "boolean",
+        "description": "True when a status probe actually produced a status code."
+      },
+      "statusCode": {
+        "type": "integer",
+        "description": "The HTTP status code from the probe. Null when the URL was not checked or the probe failed before a status arrived."
+      },
+      "contentType": {
+        "type": "string",
+        "description": "The response Content-Type from the probe, if any."
+      },
+      "lastmodRaw": {
+        "type": "string",
+        "description": "The <lastmod> value verbatim, whatever shape it had (YYYY, YYYY-MM, RFC822, +0800 without a colon, impossible dates). Kept because a parseable rewrite loses information."
+      },
+      "lastmodIso": {
+        "type": "string",
+        "description": "The same value best-effort-parsed to ISO-8601. Null when it could not be parsed — the row is never dropped for a bad date."
+      },
+      "priority": {
+        "type": "number",
+        "description": "The sitemap <priority>, if present."
+      },
+      "changeFrequency": {
+        "type": "string",
+        "description": "The sitemap <changefreq>, if present. Reported, not obeyed."
+      },
+      "hasImages": {
+        "type": "boolean",
+        "description": "The sitemap entry carried image extensions."
+      },
+      "hasNews": {
+        "type": "boolean",
+        "description": "The sitemap entry carried Google News extensions."
+      },
+      "alternateCount": {
+        "type": "integer",
+        "description": "How many hreflang / xhtml:link alternates the entry listed."
+      },
+      "crossDomain": {
+        "type": "boolean",
+        "description": "True when the URL's host is not the site you asked for. Such rows are listed but never requested."
+      },
+      "errorType": {
+        "type": "string",
+        "description": "Why this row is not a plain success. One of a fixed enum so failures can be filtered and counted — free-text errors cannot.",
+        "enum": [
+          "http_error",
+          "timeout",
+          "dns",
+          "tls",
+          "redirect_loop",
+          "rate_limited",
+          "blocked",
+          "parse_error",
+          "not_xml",
+          "html_challenge",
+          "empty_body",
+          "truncated",
+          "bad_gzip",
+          "not_gzip",
+          "gzip_bomb",
+          "too_large",
+          "skipped_budget",
+          "skipped_depth",
+          "skipped_cycle",
+          "cross_domain",
+          "ssrf_blocked",
+          "unsupported_scheme",
+          "invalid_input",
+          "not_checked",
+          "no_sitemap",
+          "unexpected"
+        ]
+      },
+      "errorMessage": {
+        "type": "string",
+        "description": "Human-readable detail for errorType. Filter on errorType; read errorMessage."
+      }
+    },
+    "required": ["url", "normalizedUrl"]
+  },
+  "views": {
+    "overview": {
+      "title": "URLs and status",
+      "description": "One row per URL the site publishes, with the status code that came back.",
+      "transformation": {
+        "fields": [
+          "url",
+          "statusCode",
+          "contentType",
+          "lastmodIso",
+          "priority",
+          "changeFrequency",
+          "errorType",
+          "errorMessage"
+        ]
+      },
+      "display": {
+        "component": "table",
+        "properties": {
+          "url": { "label": "URL", "format": "link" },
+          "statusCode": { "label": "Status", "format": "number" },
+          "contentType": { "label": "Content type", "format": "text" },
+          "lastmodIso": { "label": "Last modified", "format": "text" },
+          "priority": { "label": "Priority", "format": "number" },
+          "changeFrequency": { "label": "Change freq.", "format": "text" },
+          "errorType": { "label": "Error type", "format": "text" },
+          "errorMessage": { "label": "Error detail", "format": "text" }
+        }
+      }
+    },
+    "source": {
+      "title": "Where each URL came from",
+      "description": "Provenance and sitemap metadata: which sitemap listed it, how deep, and what the entry carried.",
+      "transformation": {
+        "fields": [
+          "url",
+          "normalizedUrl",
+          "sourceSitemap",
+          "depth",
+          "lastmodRaw",
+          "lastmodIso",
+          "hasImages",
+          "hasNews",
+          "alternateCount",
+          "crossDomain"
+        ]
+      },
+      "display": {
+        "component": "table",
+        "properties": {
+          "url": { "label": "URL", "format": "link" },
+          "normalizedUrl": { "label": "Normalized", "format": "text" },
+          "sourceSitemap": { "label": "Source sitemap", "format": "text" },
+          "depth": { "label": "Depth", "format": "number" },
+          "lastmodRaw": { "label": "Lastmod (raw)", "format": "text" },
+          "lastmodIso": { "label": "Lastmod (ISO)", "format": "text" },
+          "hasImages": { "label": "Images", "format": "boolean" },
+          "hasNews": { "label": "News", "format": "boolean" },
+          "alternateCount": { "label": "Alternates", "format": "number" },
+          "crossDomain": { "label": "Cross-domain", "format": "boolean" }
+        }
+      }
+    },
+    "problems": {
+      "title": "Anything that did not come back clean",
+      "description": "Read this first. Every row here has an errorType — filter on it rather than on the message.",
+      "transformation": {
+        "fields": [
+          "errorType",
+          "errorMessage",
+          "url",
+          "sourceSitemap",
+          "statusCode",
+          "contentType",
+          "checked"
+        ]
+      },
+      "display": {
+        "component": "table",
+        "properties": {
+          "errorType": { "label": "Error type", "format": "text" },
+          "errorMessage": { "label": "Detail", "format": "text" },
+          "url": { "label": "URL", "format": "link" },
+          "sourceSitemap": { "label": "Source sitemap", "format": "text" },
+          "statusCode": { "label": "Status", "format": "number" },
+          "contentType": { "label": "Content type", "format": "text" },
+          "checked": { "label": "Checked", "format": "boolean" }
+        }
+      }
+    }
+  }
+}

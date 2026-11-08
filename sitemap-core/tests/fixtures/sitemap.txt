@@ -1,0 +1,6 @@
+# sitemap in plain text form
+https://text.example/one
+https://text.example/two
+
+https://text.example/three
+https://text.example/four

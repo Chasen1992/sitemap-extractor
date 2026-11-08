@@ -1,0 +1,20 @@
+{
+  "actorSpecification": 1,
+  "name": "sitemap-extractor",
+  "version": "1.0",
+  "title": "Sitemap Extractor — sitemap parser, URL list and status codes",
+  "description": "Point it at a domain or a sitemap URL and get every URL the site publishes in its XML sitemap, as structured rows with optional HTTP status codes. A sitemap parser and sitemap index follower, not a web crawler: it reads published sitemap files and probes URL status only. Nine inputs, not thirty.",
+  "buildTag": "latest",
+  "dockerfile": "../Dockerfile",
+  "dockerContextDir": "../",
+  "readme": "../README.md",
+  "changelog": "../CHANGELOG.md",
+  "input": "./INPUT_SCHEMA.json",
+  "storages": {
+    "dataset": "./dataset_schema.json"
+  },
+  "defaultMemoryMbytes": 1024,
+  "minMemoryMbytes": 512,
+  "maxMemoryMbytes": 4096,
+  "usesStandbyMode": false
+}

@@ -1,0 +1,12 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><title>Just a moment...</title></head>
+<body>
+  <h1>Attention Required!</h1>
+  <p>Please enable JavaScript and cookies to continue.</p>
+  <p>Verify you are human by completing the security check below.</p>
+  <a href="https://challenge.example/cdn-cgi/challenge-platform">Cloudflare</a>
+  <a href="https://challenge.example/pricing">Pricing</a>
+  <a href="https://challenge.example/docs">Docs</a>
+</body>
+</html>

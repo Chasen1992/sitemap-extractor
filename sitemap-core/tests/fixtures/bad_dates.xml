@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://dates.example/bare-year</loc><lastmod>2024</lastmod></url>
+  <url><loc>https://dates.example/year-month</loc><lastmod>2024-03</lastmod></url>
+  <url><loc>https://dates.example/date-only</loc><lastmod>2024-03-05</lastmod></url>
+  <url><loc>https://dates.example/utc</loc><lastmod>2024-03-05T10:20:30Z</lastmod></url>
+  <url><loc>https://dates.example/offset-no-colon</loc><lastmod>2024-03-05T10:20:30+0800</lastmod></url>
+  <url><loc>https://dates.example/offset-colon</loc><lastmod>2024-03-05T10:20:30+08:00</lastmod></url>
+  <url><loc>https://dates.example/space-sep</loc><lastmod>2024-03-05 10:20:30</lastmod></url>
+  <url><loc>https://dates.example/rfc822</loc><lastmod>Tue, 05 Mar 2024 10:20:30 +0000</lastmod></url>
+  <url><loc>https://dates.example/impossible</loc><lastmod>2023-13-45</lastmod></url>
+  <url><loc>https://dates.example/garbage</loc><lastmod>not a date at all</lastmod></url>
+  <url><loc>https://dates.example/empty</loc><lastmod></lastmod></url>
+  <url><loc>https://dates.example/no-lastmod</loc></url>
+</urlset>

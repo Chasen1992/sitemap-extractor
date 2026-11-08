@@ -1,0 +1,19 @@
+# Pinned, not ranged. A sitemap parser that behaves differently after a
+# dependency bump is exactly the silent reliability debt this product is
+# selling against, so the versions are fixed and bumped on purpose.
+#
+# `ultimate-sitemap-parser` is GPL-3.0 and this Actor is a derivative work of
+# it — see NOTICE. Any distribution of this source must stay GPL-3.0-or-later.
+
+apify==4.2.1
+
+# Discovery (robots.txt, well-known paths), tolerant parsing of every sitemap
+# flavour, index recursion and cycle protection. GPL-3.0.
+ultimate-sitemap-parser==1.8.1
+
+# HTTP transport. One long-lived client per run, not one per request.
+httpx==0.28.1
+
+# Public Suffix List based registrable-domain matching, so includeSubdomains is
+# real rather than a string-suffix comparison.
+tldextract==5.4.0

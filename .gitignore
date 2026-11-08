@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Local run scratch. Written while polling the platform API during a launch,
+# and easy to mistake for project output.
+.run-status.json
+
+# A stray INPUT.json in the working directory collides with the key-value
+# store's INPUT record during a local run and silently becomes the run's input.
+INPUT.json
+
+.venv/
+venv/

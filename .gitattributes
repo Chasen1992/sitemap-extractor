@@ -1,0 +1,11 @@
+# Commits normalise to LF; a Windows checkout gets CRLF back. The corpus was
+# measured on the CRLF working copies and re-measured on an LF checkout before
+# this file was settled on — the numbers are in EVIDENCE.md and both forms pass.
+#
+# *.gz is marked binary because those fixtures are gzip payloads whose bytes are
+# the thing under test. The other byte-sensitive fixtures (latin1.xml, the
+# deliberately-truncated files) git already classifies as binary on its own;
+# verified with `git check-attr` and a full checkout round-trip rather than
+# assumed from reading this.
+* text=auto
+*.gz binary

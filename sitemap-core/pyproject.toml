@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sitemap-core"
+version = "1.0.0"
+description = "Guarded sitemap discovery, parsing and URL status probing shared by the sitemap-extractor Actor and the change-monitor product."
+readme = "README.md"
+requires-python = ">=3.10"
+
+# GPL-3.0-or-later is not a choice: ultimate-sitemap-parser is GPL-3.0, and
+# this package is a derivative work of it. Any distribution of this code must
+# stay GPL-3.0-or-later. See NOTICE.
+license = { text = "GPL-3.0-or-later" }
+authors = [{ name = "sitemap-extractor project" }]
+keywords = [
+    "sitemap",
+    "sitemap-parser",
+    "sitemap-index",
+    "robots.txt",
+    "url-status",
+    "crawler",
+    "apify",
+]
+
+dependencies = [
+    # GPL-3.0. Provides discovery (robots.txt, well-known paths), tolerant
+    # parsing of every sitemap flavour, index recursion and cycle protection.
+    # We do not fork it; policy lives in our own transport layer.
+    "ultimate-sitemap-parser==1.8.1",
+    "httpx==0.28.1",
+    # Public Suffix List based registrable-domain matching. Required so
+    # includeSubdomains is real rather than a string-suffix comparison.
+    "tldextract==5.4.0",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=8"]
+
+[tool.setuptools.packages.find]
+include = ["sitemap_core*"]
+
+[tool.setuptools.package-data]
+sitemap_core = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

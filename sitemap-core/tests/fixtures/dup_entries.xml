@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <!-- Seven spellings of ONE url. A fragment, a default port, a doubled
+       slash, a dot segment and a percent-escaped unreserved character are all
+       duplicate noise and must collapse to a single row. -->
+  <url><loc>https://dup.example/page</loc></url>
+  <url><loc>https://dup.example/page</loc></url>
+  <url><loc>https://dup.example/page#section</loc></url>
+  <url><loc>https://dup.example:443/page</loc></url>
+  <url><loc>https://dup.example//page</loc></url>
+  <url><loc>https://dup.example/./page</loc></url>
+  <url><loc>https://dup.example/pa%67e</loc></url>
+  <url><loc>https://dup.example/other</loc></url>
+  <!-- Deliberately NOT duplicates. Scheme, host and trailing slash are real
+       differences: collapsing any of them would report a live URL as dead. -->
+  <url><loc>http://dup.example/page</loc></url>
+  <url><loc>https://www.dup.example/page</loc></url>
+  <url><loc>https://dup.example/page/</loc></url>
+</urlset>

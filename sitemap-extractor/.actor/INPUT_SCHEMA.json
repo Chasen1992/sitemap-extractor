@@ -1,0 +1,73 @@
+{
+  "title": "Sitemap Extractor — get a URL list from any sitemap",
+  "description": "Give it a domain or a sitemap URL. It finds the sitemap (robots.txt, /sitemap.xml and the other usual paths), follows sitemap index files, and returns every URL the site publishes as structured rows. Tick the status-code option to have each URL probed. This is a sitemap parser, not a web crawler: it reads published sitemap files and checks URL status only — it never reads page content.",
+  "type": "object",
+  "schemaVersion": 1,
+  "properties": {
+    "startUrls": {
+      "title": "Start URLs",
+      "type": "array",
+      "description": "One or more domains or URLs.\n\n- A bare domain (`example.com`) makes the extractor discover the sitemap through robots.txt and the usual paths (`/sitemap.xml`, `/sitemap_index.xml`, `/wp-sitemap.xml`, …).\n- A sitemap URL (`https://example.com/sitemap.xml`) is used directly as the seed. Sitemap index files are followed automatically.\n- A normal page URL behaves like a bare domain: the extractor looks for the sitemap belonging to that site.",
+      "editor": "requestListSources",
+      "prefill": [{ "url": "https://www.apify.com" }]
+    },
+    "maxUrls": {
+      "sectionCaption": "Output size",
+      "title": "Max URLs",
+      "type": "integer",
+      "description": "How many URL rows to return at most. This caps the **output** only — it does not cap how much work the run may do. A single sitemap index can reference thousands of child sitemaps, all of which have to be read before the first URL appears. Use `Max total requests` to bound the work.\n\nWith `Check status codes` on, each URL is probed at the target's own polite rate, so runtime grows roughly 0.3 s per URL plus the cost of reading the sitemaps. 200 rows is a couple of minutes; 10,000 rows on one host can take well over half an hour. The run summary marks `truncated: true` when this cap is the reason you did not get every URL.",
+      "minimum": 1,
+      "maximum": 1000000,
+      "default": 1000,
+      "prefill": 200
+    },
+    "checkStatusCodes": {
+      "title": "Check status codes",
+      "type": "boolean",
+      "description": "Probe every discovered URL and report its HTTP status code and content type.\n\nUses `HEAD` first and falls back to `GET` only when the server refuses `HEAD` (`405` / `501`). Only the status is recorded — page bodies are never read or stored. Turn this off to get the URL list without the extra requests; the run is then much faster and much cheaper.",
+      "default": true
+    },
+    "followSitemapIndex": {
+      "title": "Follow sitemap index",
+      "type": "boolean",
+      "description": "Recurse into `<sitemapindex>` files and read their child sitemaps. Needed for WordPress (`wp-sitemap.xml` is an index of indexes) and for any site that splits its sitemap by section. Turning it off returns only the top-level sitemap's own URLs.",
+      "default": true
+    },
+    "maxSitemapDepth": {
+      "title": "Max sitemap depth",
+      "type": "integer",
+      "description": "How deep to recurse through nested sitemap indexes. Depth 1 reads one level of children; depth 3 covers a WordPress install, which is an index of indexes. Cycles (A → B → A) are detected and refused regardless of this setting.",
+      "minimum": 0,
+      "maximum": 10,
+      "default": 3
+    },
+    "includeSubdomains": {
+      "title": "Include subdomains",
+      "type": "boolean",
+      "description": "Keep URLs whose host is a subdomain of the start URL (e.g. `shop.example.com` when you started at `example.com`). Matching uses the Public Suffix List, so `example.co.uk` is treated as one site and `example.co.uk` vs `other.co.uk` are not.\n\n`www.example.com` and `example.com` are one site and are always kept, whatever this is set to. Nearly every sitemap lists the apex, so a run that treated that pair as foreign would come back with nothing to check.\n\nURLs on a genuinely different domain are always marked `cross_domain` and are never requested — a sitemap often lists CDN and partner hosts, and fetching them is not what you asked for.",
+      "default": false
+    },
+    "proxyConfiguration": {
+      "title": "Proxy configuration",
+      "type": "object",
+      "description": "Optional proxy, for a stated geographic or access reason.\n\n**This tool never rotates proxies.** If a target keeps answering `403` or serves a bot-challenge page, the run records it and moves on. Rotating proxies to get past a block is not something this product does — that is the line between checking status codes and evading a site's decision.",
+      "editor": "proxy"
+    },
+    "maxTotalChargeUsd": {
+      "sectionCaption": "Cost control",
+      "title": "Max total charge (USD)",
+      "type": "number",
+      "description": "Stop the run before it charges you more than this, in US dollars.\n\nRows are charged one pay-per-event item each. When the ceiling is reached, the run stops pushing rows and says so in the run summary (`rowsDroppedForChargeLimit`) — the dataset is cut, not lost. Leave empty to be governed only by the platform's own limit. This is a safety net, not a price quote: it bounds the charge, not the compute.",
+      "minimum": 0.01
+    },
+    "maxRequestsTotal": {
+      "title": "Max total requests",
+      "type": "integer",
+      "description": "The request budget for the whole run — sitemap fetches, redirect hops, retries and status probes all count against it. This is what stops a runaway run: one sitemap index can legally reference 50,000 child sitemaps, and the status check then doubles the request count.\n\nWhen the budget runs out the run ends cleanly with `truncated: true` in the summary and the remaining URLs marked `skipped_budget`. It never fails silently.",
+      "minimum": 1,
+      "maximum": 1000000,
+      "default": 20000
+    }
+  },
+  "required": ["startUrls"]
+}

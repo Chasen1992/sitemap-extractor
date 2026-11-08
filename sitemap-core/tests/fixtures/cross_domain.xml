@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://main.example/local-page</loc></url>
+  <url><loc>https://cdn.partner-network.example/asset-page</loc></url>
+  <url><loc>https://www.main.example/another</loc></url>
+  <url><loc>https://tracking.third-party-example.net/redirect</loc></url>
+</urlset>

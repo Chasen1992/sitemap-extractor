@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset>
+  <url><loc>https://no-ns.example/page-1</loc></url>
+  <url><loc>https://no-ns.example/page-2</loc><lastmod>2024-01-02</lastmod></url>
+  <url><loc>https://no-ns.example/page-3</loc></url>
+</urlset>
